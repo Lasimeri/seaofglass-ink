@@ -6,6 +6,7 @@ import {
 } from './crypto.js?v=1';
 import { createPaste, fetchPaste, listPastes, setLogger } from './storage.js?v=2';
 import { compress, decompress } from './compress.js?v=1';
+import { encode as ittyEncode, decode as ittyDecode, isIttybittyUrl, isIttybittyFragment, extractFragment } from './ittybitty.js?v=1';
 
 // --- Inline fingerprint (avoids module loading issues) ---
 async function getFingerprintKey() {
@@ -58,6 +59,10 @@ const decryptedEl = $('decrypted-text');
 const copyTextBtn = $('copy-text');
 const readPasswordInput = $('read-password');
 const readPasswordBtn = $('read-password-btn');
+const renderSection = $('render-section');
+const renderIframe = $('render-iframe');
+const renderType = $('render-type');
+const renderTitle = $('render-title');
 
 const charCountEl = $('char-count');
 const lineCountEl = $('line-count');
@@ -157,19 +162,29 @@ createBtn.addEventListener('click', async () => {
   const hasPassword = password.length > 0;
 
   createBtn.disabled = true;
+  const effectiveMode = mode === 'ittybitty' ? 'shareable' : mode;
   try {
     log('Mode: ' + mode + ', password: ' + (hasPassword ? 'yes' : 'no'));
 
+    // For ittybitty mode, encode content as ittybitty fragment first
+    let contentToStore = text;
+    if (mode === 'ittybitty') {
+      setStatus('Encoding as ittybitty page...');
+      const ittyFrag = await ittyEncode(text, pasteNameInput.value.trim() || '');
+      log('Ittybitty encoded: ' + ittyFrag.length + ' chars');
+      contentToStore = ittyFrag;
+    }
+
     setStatus('Compressing...');
-    log('Compressing ' + text.length + ' chars...');
-    const compressed = await compress(text);
-    log('Compressed: ' + text.length + ' -> ' + compressed.length + ' bytes');
+    log('Compressing ' + contentToStore.length + ' chars...');
+    const compressed = await compress(contentToStore);
+    log('Compressed: ' + contentToStore.length + ' -> ' + compressed.length + ' bytes');
 
     let mainKey, keyExport, pasteId;
     let payload = bufToBase64(compressed);
     log('Base64 encoded: ' + payload.length + ' chars');
 
-    if (mode === 'public') {
+    if (effectiveMode === 'public') {
       const epoch = getPubEpoch();
       setStatus('Deriving site key...');
       log('Deriving rotating site key (epoch: ' + epoch + ')...');
@@ -177,7 +192,7 @@ createBtn.addEventListener('click', async () => {
       const randomBuf = crypto.getRandomValues(new Uint8Array(8));
       pasteId = epoch + '.' + Array.from(randomBuf).map(b => b.toString(16).padStart(2, '0')).join('');
       log('Public paste, ID: ' + pasteId);
-    } else if (mode === 'device') {
+    } else if (effectiveMode === 'device') {
       setStatus('Generating device key...');
       log('Deriving device key...');
       mainKey = await getFingerprintKey();
@@ -193,7 +208,7 @@ createBtn.addEventListener('click', async () => {
       log('Shareable paste, ID: ' + pasteId);
     }
 
-    if (hasPassword && mode !== 'public') {
+    if (hasPassword && effectiveMode !== 'public') {
       setStatus('Encrypting with password...');
       log('Applying PBKDF2 password layer (100k iterations)...');
       const pwKey = await derivePasswordKey(password, pasteId);
@@ -202,7 +217,7 @@ createBtn.addEventListener('click', async () => {
     }
 
     setStatus('Encrypting...');
-    log('Applying ' + (mode === 'public' ? 'site' : 'main') + ' encryption layer...');
+    log('Applying ' + (effectiveMode === 'public' ? 'site' : 'main') + ' encryption layer...');
     payload = await encrypt(payload, mainKey);
     log('Encrypted: ' + payload.length + ' chars');
 
@@ -212,13 +227,13 @@ createBtn.addEventListener('click', async () => {
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 16).replace('T', ' ');
     const fullName = pasteName ? pasteName + ' - ' + timestamp : timestamp;
-    await createPaste(pasteId, payload, mode === 'public', fullName);
+    await createPaste(pasteId, payload, effectiveMode === 'public', fullName);
     log('Paste stored successfully');
 
     let fragment;
-    if (mode === 'public') {
+    if (effectiveMode === 'public') {
       fragment = 'p:' + pasteId;
-    } else if (mode === 'device') {
+    } else if (effectiveMode === 'device') {
       fragment = 'd:' + pasteId + (hasPassword ? ':p' : '');
     } else {
       fragment = keyExport + (hasPassword ? ':p' : '');
@@ -302,8 +317,35 @@ async function readPaste(password) {
     const text = await decompress(compressed);
     log('Decompressed: ' + compressed.length + ' bytes -> ' + text.length + ' chars');
 
-    decryptedEl.textContent = text;
-    readSection.classList.remove('hidden');
+    // Auto-detect ittybitty content and render
+    if (isIttybittyFragment(text)) {
+      log('Detected ittybitty page, rendering...');
+      try {
+        const decoded = await ittyDecode(text);
+        renderType.textContent = decoded.type;
+        renderTitle.textContent = decoded.title || '';
+
+        // Render in sandboxed iframe
+        let html;
+        if (decoded.type === 'html' || decoded.type === 'svg') {
+          html = decoded.content;
+        } else if (decoded.type === 'markdown') {
+          html = '<pre style="font-family:monospace;white-space:pre-wrap;padding:1rem;">' + decoded.content.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>';
+        } else {
+          html = '<pre style="font-family:monospace;white-space:pre-wrap;padding:1rem;">' + decoded.content.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</pre>';
+        }
+        renderIframe.srcdoc = html;
+        renderSection.classList.remove('hidden');
+        log('Rendered as ' + decoded.type);
+      } catch (e) {
+        log('Ittybitty decode failed, showing raw: ' + e.message);
+        decryptedEl.textContent = text;
+        readSection.classList.remove('hidden');
+      }
+    } else {
+      decryptedEl.textContent = text;
+      readSection.classList.remove('hidden');
+    }
     passwordSection.classList.add('hidden');
     setStatus('Paste loaded');
     log('Done');

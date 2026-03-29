@@ -32,6 +32,7 @@
           <option value="shareable">shareable</option>
           <option value="public">public</option>
           <option value="device">device-bound</option>
+          <option value="ittybitty">ittybitty page</option>
         </select>
         <input type="password" id="password-input" placeholder="password (optional)">
         <button id="create-paste">encrypt & save</button>
@@ -59,6 +60,16 @@
         <pre id="decrypted-text"></pre>
         <button id="copy-text">Copy</button>
       </div>
+
+      <div id="render-section" class="hidden">
+        <div class="render-header">
+          <span id="render-type">html</span>
+          <span id="render-title"></span>
+        </div>
+        <div class="render-frame">
+          <iframe id="render-iframe" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
+        </div>
+      </div>
     </div>
 
     <div class="log-box">
@@ -77,6 +88,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/main.js?v=13"></script>
+  <script type="module" src="js/main.js?v=14"></script>
 </body>
 </html>

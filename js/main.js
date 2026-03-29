@@ -107,6 +107,9 @@ function parseFragment() {
   if (clean.startsWith('d:')) {
     return { mode: 'device', pasteId: clean.slice(2), hasPassword };
   }
+  if (clean.startsWith('p:')) {
+    return { mode: 'public', pasteId: clean.slice(2), hasPassword: false };
+  }
   return { mode: 'shareable', key: clean, hasPassword };
 }
 
@@ -139,9 +142,17 @@ createBtn.addEventListener('click', async () => {
     log('Compressed: ' + text.length + ' -> ' + compressed.length + ' bytes');
 
     let mainKey, keyExport, pasteId;
-    if (mode === 'device') {
+    let payload = bufToBase64(compressed);
+    log('Base64 encoded: ' + payload.length + ' chars');
+
+    if (mode === 'public') {
+      // Public: compress + base64 only, no encryption
+      const randomBuf = crypto.getRandomValues(new Uint8Array(8));
+      pasteId = Array.from(randomBuf).map(b => b.toString(16).padStart(2, '0')).join('');
+      log('Public paste, ID: ' + pasteId);
+    } else if (mode === 'device') {
       setStatus('Generating device key...');
-      log('Deriving fingerprint key...');
+      log('Deriving device key...');
       mainKey = await getFingerprintKey();
       const randomBuf = crypto.getRandomValues(new Uint8Array(8));
       pasteId = Array.from(randomBuf).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -155,29 +166,32 @@ createBtn.addEventListener('click', async () => {
       log('Shareable paste, ID: ' + pasteId);
     }
 
-    let payload = bufToBase64(compressed);
-    log('Base64 encoded: ' + payload.length + ' chars');
+    if (mode !== 'public') {
+      if (hasPassword) {
+        setStatus('Encrypting with password...');
+        log('Applying PBKDF2 password layer (100k iterations)...');
+        const pwKey = await derivePasswordKey(password, pasteId);
+        payload = await encrypt(payload, pwKey);
+        log('Password layer applied: ' + payload.length + ' chars');
+      }
 
-    if (hasPassword) {
-      setStatus('Encrypting with password...');
-      log('Applying PBKDF2 password layer (100k iterations)...');
-      const pwKey = await derivePasswordKey(password, pasteId);
-      payload = await encrypt(payload, pwKey);
-      log('Password layer applied: ' + payload.length + ' chars');
+      setStatus('Encrypting...');
+      log('Applying main encryption layer...');
+      payload = await encrypt(payload, mainKey);
+      log('Encrypted: ' + payload.length + ' chars');
+    } else {
+      log('Public mode - no encryption applied');
     }
 
-    setStatus('Encrypting...');
-    log('Applying main encryption layer...');
-    payload = await encrypt(payload, mainKey);
-    log('Encrypted: ' + payload.length + ' chars');
-
     setStatus('Uploading to GitHub...');
-    log('Posting encrypted paste to GitHub Issues...');
-    await createPaste(pasteId, payload);
+    log('Posting paste to GitHub Issues...');
+    await createPaste(pasteId, payload, mode === 'public');
     log('Paste stored successfully');
 
     let fragment;
-    if (mode === 'device') {
+    if (mode === 'public') {
+      fragment = 'p:' + pasteId;
+    } else if (mode === 'device') {
       fragment = 'd:' + pasteId + (hasPassword ? ':p' : '');
     } else {
       fragment = keyExport + (hasPassword ? ':p' : '');
@@ -208,9 +222,12 @@ async function readPaste(password) {
 
   try {
     let mainKey, pasteId;
-    if (parsed.mode === 'device') {
+    if (parsed.mode === 'public') {
+      pasteId = parsed.pasteId;
+      log('Public paste, ID: ' + pasteId);
+    } else if (parsed.mode === 'device') {
       setStatus('Generating device key...');
-      log('Deriving fingerprint key...');
+      log('Deriving device key...');
       mainKey = await getFingerprintKey();
       pasteId = parsed.pasteId;
       log('Device-bound paste, ID: ' + pasteId);
@@ -235,17 +252,21 @@ async function readPaste(password) {
     let payload = await fetchPaste(pasteId);
     log('Paste fetched: ' + payload.length + ' chars');
 
-    setStatus('Decrypting...');
-    log('Decrypting main layer...');
-    payload = await decrypt(payload, mainKey);
-    log('Main layer decrypted');
+    if (parsed.mode !== 'public') {
+      setStatus('Decrypting...');
+      log('Decrypting main layer...');
+      payload = await decrypt(payload, mainKey);
+      log('Main layer decrypted');
 
-    if (parsed.hasPassword) {
-      setStatus('Decrypting password layer...');
-      log('Decrypting PBKDF2 password layer...');
-      const pwKey = await derivePasswordKey(password, pasteId);
-      payload = await decrypt(payload, pwKey);
-      log('Password layer decrypted');
+      if (parsed.hasPassword) {
+        setStatus('Decrypting password layer...');
+        log('Decrypting PBKDF2 password layer...');
+        const pwKey = await derivePasswordKey(password, pasteId);
+        payload = await decrypt(payload, pwKey);
+        log('Password layer decrypted');
+      }
+    } else {
+      log('Public paste - no decryption needed');
     }
 
     setStatus('Decompressing...');
@@ -257,7 +278,7 @@ async function readPaste(password) {
     decryptedEl.textContent = text;
     readSection.classList.remove('hidden');
     passwordSection.classList.add('hidden');
-    setStatus('Paste decrypted');
+    setStatus(parsed.mode === 'public' ? 'Public paste loaded' : 'Paste decrypted');
     log('Done');
 
   } catch (err) {
@@ -311,13 +332,17 @@ async function loadDirectory() {
       for (const p of pastes) {
         const el = document.createElement('a');
         el.className = 'dir-entry';
-        el.href = '#' + p.id;
-        el.innerHTML = '<span class="dir-id">' + p.id + '</span><span class="dir-age">' + formatAge(p.created) + '</span>';
-        el.addEventListener('click', (e) => {
-          e.preventDefault();
-          location.hash = p.id;
-          readPaste(null);
-        });
+        const frag = p.isPublic ? 'p:' + p.id : p.id;
+        el.href = '#' + frag;
+        const badge = p.isPublic ? '<span class="dir-badge pub">public</span>' : '<span class="dir-badge enc">encrypted</span>';
+        el.innerHTML = '<span class="dir-id">' + p.id + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span>';
+        if (p.isPublic) {
+          el.addEventListener('click', (e) => {
+            e.preventDefault();
+            location.hash = 'p:' + p.id;
+            readPaste(null);
+          });
+        }
         directoryList.appendChild(el);
       }
     }

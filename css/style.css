@@ -203,6 +203,23 @@ button:disabled {
   font-size: 0.6rem;
 }
 
+.dir-badge {
+  font-size: 0.55rem;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid;
+  margin: 0 0.5rem;
+}
+
+.dir-badge.pub {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.dir-badge.enc {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
 .dir-empty {
   font-size: 0.7rem;
   color: var(--text-dim);

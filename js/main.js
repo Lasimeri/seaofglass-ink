@@ -49,6 +49,7 @@ const dirPanel = $('dir-panel');
 const directoryList = $('directory-list');
 const dirToggle = $('dir-toggle');
 const dirClose = $('dir-close');
+const dirLogEl = $('dir-log');
 const pasteInput = $('paste-input');
 const createBtn = $('create-paste');
 const modeSelect = $('mode-select');
@@ -347,12 +348,22 @@ copyTextBtn.addEventListener('click', () => {
 // --- Paste Directory Panel ---
 let dirLoaded = false;
 
+function dirLog(msg) {
+  const line = document.createElement('div');
+  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  dirLogEl.appendChild(line);
+  dirLogEl.scrollTop = dirLogEl.scrollHeight;
+}
+
 async function loadDirectory() {
   if (dirLoaded) return;
+  dirLogEl.innerHTML = '';
   directoryList.innerHTML = '<div class="dir-empty">loading...</div>';
-  log('Loading paste directory...');
+  dirLog('Connecting to GitHub...');
   try {
+    dirLog('Fetching paste index...');
     const pastes = await listPastes();
+    dirLog('Found ' + pastes.length + ' paste(s)');
     if (pastes.length === 0) {
       directoryList.innerHTML = '<div class="dir-empty">no pastes yet</div>';
     } else {
@@ -367,6 +378,8 @@ async function loadDirectory() {
         if (p.isPublic) {
           el.addEventListener('click', (e) => {
             e.preventDefault();
+            dirPanel.classList.add('hidden');
+            dirToggle.classList.remove('active');
             location.hash = 'p:' + p.id;
             readPaste(null);
           });
@@ -375,18 +388,17 @@ async function loadDirectory() {
       }
     }
     dirLoaded = true;
-    log(pastes.length + ' paste(s) in directory');
+    dirLog('Directory loaded');
   } catch (err) {
     directoryList.innerHTML = '<div class="dir-empty">failed to load</div>';
-    log('Directory error: ' + err.message);
+    dirLog('Error: ' + err.message);
   }
 }
 
 function toggleDir() {
-  const open = dirPanel.classList.toggle('hidden');
-  dirToggle.classList.toggle('active', !open);
-  if (!open) return; // closing
-  loadDirectory();
+  const isHidden = dirPanel.classList.toggle('hidden');
+  dirToggle.classList.toggle('active', !isHidden);
+  if (!isHidden) loadDirectory();
 }
 
 dirToggle.addEventListener('click', toggleDir);

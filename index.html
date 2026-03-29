@@ -12,31 +12,23 @@
 </head>
 <body>
   <div class="container">
-    <h1><span>sea of glass</span> / ink</h1>
-    <p class="subtitle">encrypted pastebin - serverless, zero trust</p>
+    <div class="header-row">
+      <div>
+        <h1><span>sea of glass</span> / ink</h1>
+        <p class="subtitle">encrypted pastebin - serverless, zero trust</p>
+      </div>
+      <button id="dir-toggle" class="dir-toggle-btn" title="Browse pastes">pastes</button>
+    </div>
 
     <div id="status"></div>
 
     <div id="create-section">
-      <div class="editor-split">
-        <div class="editor-pane">
-          <span class="pane-label">editor</span>
-          <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
-          <div class="char-count">
-            <span id="char-count">0 chars</span>
-            <span id="line-count">1 line</span>
-          </div>
+      <div class="editor-frame">
+        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
+        <div class="editor-footer">
+          <span id="char-count">0 chars</span>
+          <span id="line-count">1 line</span>
         </div>
-        <div id="dir-panel" class="dir-panel hidden">
-          <div class="dir-panel-header">
-            <span>pastes</span>
-            <button id="dir-close" class="dir-close-btn">&times;</button>
-          </div>
-          <div id="directory-list" class="dir-panel-body"></div>
-        </div>
-      </div>
-      <div class="editor-toolbar">
-        <button id="dir-toggle" class="toolbar-btn" title="Browse pastes">pastes</button>
       </div>
 
       <div class="options-row">
@@ -46,9 +38,8 @@
           <option value="device">device-bound</option>
         </select>
         <input type="password" id="password-input" placeholder="password (optional)">
+        <button id="create-paste">encrypt & save</button>
       </div>
-
-      <button id="create-paste">encrypt & save</button>
     </div>
 
     <div id="share-section" class="hidden">
@@ -72,10 +63,19 @@
       <button id="copy-text">Copy</button>
     </div>
 
-
     <div id="log" class="log-panel"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=7"></script>
+  <!-- Directory overlay panel -->
+  <div id="dir-panel" class="dir-overlay hidden">
+    <div class="dir-header">
+      <span>pastes</span>
+      <button id="dir-close">&times;</button>
+    </div>
+    <div id="dir-log" class="dir-log"></div>
+    <div id="directory-list" class="dir-list"></div>
+  </div>
+
+  <script type="module" src="js/main.js?v=8"></script>
 </body>
 </html>

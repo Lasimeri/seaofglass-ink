@@ -360,16 +360,13 @@ async function loadDirectory() {
     } else {
       directoryList.innerHTML = '';
       for (const p of pastes) {
-        const el = document.createElement('a');
-        el.className = 'dir-entry';
-        const frag = p.isPublic ? 'p:' + p.id : p.id;
-        el.href = '#' + frag;
+        const el = document.createElement('div');
+        el.className = 'dir-entry' + (p.isPublic ? ' clickable' : '');
         const badge = p.isPublic ? '<span class="dir-badge pub">public</span>' : '<span class="dir-badge enc">encrypted</span>';
         const label = p.name || p.id;
         el.innerHTML = '<span class="dir-id">' + label + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span>';
         if (p.isPublic) {
-          el.addEventListener('click', (e) => {
-            e.preventDefault();
+          el.addEventListener('click', () => {
             location.hash = 'p:' + p.id;
             readPaste(null);
           });

@@ -264,7 +264,8 @@ button:disabled {
 
 .dir-entry:last-child { border-bottom: none; }
 
-.dir-entry:hover { background: var(--surface); }
+.dir-entry.clickable { cursor: pointer; }
+.dir-entry.clickable:hover { background: var(--surface); }
 
 .dir-id {
   color: var(--accent);

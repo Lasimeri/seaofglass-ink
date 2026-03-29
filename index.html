@@ -18,7 +18,14 @@
     <div id="status"></div>
 
     <div id="create-section">
-      <textarea id="paste-input" placeholder="enter text to encrypt..." rows="10"></textarea>
+      <div class="editor-pane">
+        <span class="pane-label">editor</span>
+        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
+        <div class="char-count">
+          <span id="char-count">0 chars</span>
+          <span id="line-count">1 line</span>
+        </div>
+      </div>
 
       <div class="options-row">
         <select id="mode-select">
@@ -61,6 +68,6 @@
     <div id="log" class="log-panel"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=5"></script>
+  <script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>

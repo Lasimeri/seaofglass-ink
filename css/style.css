@@ -53,22 +53,61 @@ h1 span { color: var(--accent); }
   min-height: 1.2em;
 }
 
-/* Textarea */
+/* Editor pane — matches ittybitty visual style */
+.editor-pane {
+  border: 1px solid var(--border);
+  background: var(--border);
+  margin-bottom: 0.75rem;
+  position: relative;
+}
+
+.editor-pane .pane-label {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 1;
+}
+
 #paste-input {
   font-family: var(--mono);
   font-size: 0.8rem;
+  line-height: 1.5;
   width: 100%;
-  min-height: 200px;
-  background: var(--surface);
+  min-height: 400px;
+  background: var(--bg);
   color: var(--text);
-  border: 1px solid var(--border);
-  padding: 0.75rem;
+  border: none;
+  padding: 0.75rem 1rem;
   outline: none;
   resize: vertical;
-  margin-bottom: 0.75rem;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
 }
 
-#paste-input:focus { border-color: var(--accent); }
+#paste-input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.4;
+}
+
+#paste-input:focus {
+  box-shadow: inset 2px 0 0 var(--accent-dim);
+}
+
+.char-count {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
 
 /* Options row */
 .options-row {

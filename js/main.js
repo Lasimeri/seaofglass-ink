@@ -58,7 +58,17 @@ const copyTextBtn = $('copy-text');
 const readPasswordInput = $('read-password');
 const readPasswordBtn = $('read-password-btn');
 
+const charCountEl = $('char-count');
+const lineCountEl = $('line-count');
+
 function setStatus(msg) { statusEl.textContent = msg; }
+
+// Live char/line counter
+pasteInput.addEventListener('input', () => {
+  const v = pasteInput.value;
+  charCountEl.textContent = v.length + ' chars';
+  lineCountEl.textContent = (v.split('\n').length) + ' lines';
+});
 
 function log(msg) {
   console.log('[ink] ' + msg);

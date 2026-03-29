@@ -147,6 +147,12 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ===== Action zone - fixed height to prevent layout shifts ===== */
+.action-zone {
+  min-height: 3rem;
+  margin-bottom: 0;
+}
+
 /* ===== Share / password ===== */
 .hint {
   font-size: 0.7rem;
@@ -208,10 +214,9 @@ button:disabled {
   font-size: 0.6rem;
   color: var(--text-dim);
   background: var(--bg);
-  max-height: 140px;
+  height: 120px;
   overflow-y: auto;
   line-height: 1.6;
-  min-height: 2.5rem;
 }
 
 /* ===== Paste list box ===== */
@@ -247,7 +252,7 @@ button:disabled {
 
 .paste-list-body {
   background: var(--bg);
-  max-height: 250px;
+  height: 300px;
   overflow-y: auto;
 }
 

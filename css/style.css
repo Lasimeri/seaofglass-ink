@@ -96,6 +96,30 @@ h1 span { color: var(--accent); }
   border-top: 1px solid var(--border);
 }
 
+/* ===== Format toggle ===== */
+.format-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.toggle-label input {
+  accent-color: var(--accent);
+}
+
+.toggle-label input:checked + span {
+  color: var(--accent);
+}
+
 /* ===== Options row ===== */
 .options-row {
   display: flex;

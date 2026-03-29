@@ -63,6 +63,7 @@ const renderSection = $('render-section');
 const renderIframe = $('render-iframe');
 const renderType = $('render-type');
 const renderTitle = $('render-title');
+const ittybittyToggle = $('ittybitty-toggle');
 
 const charCountEl = $('char-count');
 const lineCountEl = $('line-count');
@@ -162,13 +163,13 @@ createBtn.addEventListener('click', async () => {
   const hasPassword = password.length > 0;
 
   createBtn.disabled = true;
-  const effectiveMode = mode === 'ittybitty' ? 'shareable' : mode;
+  const isIttybitty = ittybittyToggle.checked;
   try {
-    log('Mode: ' + mode + ', password: ' + (hasPassword ? 'yes' : 'no'));
+    log('Mode: ' + mode + (isIttybitty ? ' (ittybitty)' : '') + ', password: ' + (hasPassword ? 'yes' : 'no'));
 
-    // For ittybitty mode, encode content as ittybitty fragment first
+    // Pre-process: encode as ittybitty fragment if toggled
     let contentToStore = text;
-    if (mode === 'ittybitty') {
+    if (isIttybitty) {
       setStatus('Encoding as ittybitty page...');
       const ittyFrag = await ittyEncode(text, pasteNameInput.value.trim() || '');
       log('Ittybitty encoded: ' + ittyFrag.length + ' chars');
@@ -184,7 +185,7 @@ createBtn.addEventListener('click', async () => {
     let payload = bufToBase64(compressed);
     log('Base64 encoded: ' + payload.length + ' chars');
 
-    if (effectiveMode === 'public') {
+    if (mode === 'public') {
       const epoch = getPubEpoch();
       setStatus('Deriving site key...');
       log('Deriving rotating site key (epoch: ' + epoch + ')...');
@@ -192,7 +193,7 @@ createBtn.addEventListener('click', async () => {
       const randomBuf = crypto.getRandomValues(new Uint8Array(8));
       pasteId = epoch + '.' + Array.from(randomBuf).map(b => b.toString(16).padStart(2, '0')).join('');
       log('Public paste, ID: ' + pasteId);
-    } else if (effectiveMode === 'device') {
+    } else if (mode === 'device') {
       setStatus('Generating device key...');
       log('Deriving device key...');
       mainKey = await getFingerprintKey();
@@ -208,7 +209,7 @@ createBtn.addEventListener('click', async () => {
       log('Shareable paste, ID: ' + pasteId);
     }
 
-    if (hasPassword && effectiveMode !== 'public') {
+    if (hasPassword && mode !== 'public') {
       setStatus('Encrypting with password...');
       log('Applying PBKDF2 password layer (100k iterations)...');
       const pwKey = await derivePasswordKey(password, pasteId);
@@ -217,7 +218,7 @@ createBtn.addEventListener('click', async () => {
     }
 
     setStatus('Encrypting...');
-    log('Applying ' + (effectiveMode === 'public' ? 'site' : 'main') + ' encryption layer...');
+    log('Applying ' + (mode === 'public' ? 'site' : 'main') + ' encryption layer...');
     payload = await encrypt(payload, mainKey);
     log('Encrypted: ' + payload.length + ' chars');
 
@@ -227,13 +228,13 @@ createBtn.addEventListener('click', async () => {
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 16).replace('T', ' ');
     const fullName = pasteName ? pasteName + ' - ' + timestamp : timestamp;
-    await createPaste(pasteId, payload, effectiveMode === 'public', fullName);
+    await createPaste(pasteId, payload, mode === 'public', fullName);
     log('Paste stored successfully');
 
     let fragment;
-    if (effectiveMode === 'public') {
+    if (mode === 'public') {
       fragment = 'p:' + pasteId;
-    } else if (effectiveMode === 'device') {
+    } else if (mode === 'device') {
       fragment = 'd:' + pasteId + (hasPassword ? ':p' : '');
     } else {
       fragment = keyExport + (hasPassword ? ':p' : '');

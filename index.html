@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sea of glass — ink</title>
+  <meta property="og:title" content="sea of glass — ink">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#0a0a0f">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --border: #1e1e2e;
+      --text: #c4945a;
+      --text-dim: #8a6a3e;
+      --accent: #c4945a;
+      --accent-dim: #7a5c38;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 400;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.05em;
+    }
+
+    .subtitle {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      opacity: 0.6;
+      margin-bottom: 2rem;
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    .status {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      opacity: 0.4;
+    }
+
+    .status a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .status a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>sea of glass / ink</h1>
+    <p class="subtitle">under construction</p>
+    <hr class="sep">
+    <p class="status"><a href="https://seaof.glass">seaof.glass</a></p>
+  </div>
+</body>
+</html>

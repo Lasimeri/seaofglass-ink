@@ -159,17 +159,55 @@ button:disabled {
   margin-bottom: 0.75rem;
 }
 
-/* Debug log */
-.debug-log {
+/* Log panel - always visible */
+.log-panel {
   margin-top: 1.5rem;
   padding: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
   font-size: 0.6rem;
   color: var(--text-dim);
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
   line-height: 1.6;
+  min-height: 2rem;
+}
+
+/* Directory */
+.section-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin: 1.5rem 0 0.5rem;
+  letter-spacing: 0.1em;
+}
+
+.dir-entry {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  font-size: 0.7rem;
+  transition: background 0.15s;
+}
+
+.dir-entry:hover { background: var(--surface); }
+
+.dir-id {
+  color: var(--accent);
+  font-family: var(--mono);
+}
+
+.dir-age {
+  color: var(--text-dim);
+  font-size: 0.6rem;
+}
+
+.dir-empty {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  opacity: 0.5;
+  padding: 0.5rem 0;
 }
 
 .hidden { display: none !important; }

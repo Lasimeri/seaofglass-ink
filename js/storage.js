@@ -84,6 +84,24 @@ export async function fetchPaste(pasteId) {
   throw new Error('Paste not found');
 }
 
+export async function listPastes() {
+  await init();
+  _log('Listing pastes...');
+  const res = await fetch(
+    await apiUrl('/issues?state=open&per_page=50&sort=created&direction=desc&labels='),
+    { headers: await headers() }
+  );
+  if (!res.ok) throw new Error('List failed: ' + res.status);
+  const issues = await res.json();
+  return issues
+    .filter(i => i.title.startsWith('[paste:'))
+    .map(i => ({
+      id: i.title.slice(7, -1),
+      created: i.created_at,
+      issueNumber: i.number
+    }));
+}
+
 export async function deletePaste(issueNumber) {
   await init();
   await fetch(await apiUrl(`/issues/${issueNumber}`), {

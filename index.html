@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>sea of glass — ink</title>
-  <meta property="og:title" content="sea of glass — ink">
-  <meta property="og:description" content="encrypted pastebin — serverless, zero trust">
+  <title>sea of glass - ink</title>
+  <meta property="og:title" content="sea of glass - ink">
+  <meta property="og:description" content="encrypted pastebin - serverless, zero trust">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#0a0a0f">
   <link rel="stylesheet" href="css/style.css">
@@ -13,7 +13,7 @@
 <body>
   <div class="container">
     <h1><span>sea of glass</span> / ink</h1>
-    <p class="subtitle">encrypted pastebin — serverless, zero trust</p>
+    <p class="subtitle">encrypted pastebin - serverless, zero trust</p>
 
     <div id="status"></div>
 
@@ -32,7 +32,7 @@
     </div>
 
     <div id="share-section" class="hidden">
-      <p class="hint">share this link — the encryption key is in the fragment</p>
+      <p class="hint">share this link - the encryption key is in the fragment</p>
       <div class="share-row">
         <input type="text" id="share-link" readonly>
         <button id="copy-link">Copy</button>
@@ -52,9 +52,14 @@
       <button id="copy-text">Copy</button>
     </div>
 
-    <div id="debug" class="debug-log hidden"></div>
+    <div id="directory-section" class="hidden">
+      <p class="section-label">-- recent pastes --</p>
+      <div id="directory-list"></div>
+    </div>
+
+    <div id="log" class="log-panel"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=2"></script>
+  <script type="module" src="js/main.js?v=3"></script>
 </body>
 </html>

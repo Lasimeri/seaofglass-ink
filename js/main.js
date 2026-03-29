@@ -361,17 +361,38 @@ async function loadDirectory() {
       directoryList.innerHTML = '';
       for (const p of pastes) {
         const el = document.createElement('div');
-        el.className = 'dir-entry' + (p.isPublic ? ' clickable' : '');
+        el.className = 'dir-entry';
         const badge = p.isPublic ? '<span class="dir-badge pub">public</span>' : '<span class="dir-badge enc">encrypted</span>';
         const label = p.name || p.id;
-        el.innerHTML = '<span class="dir-id">' + label + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span>';
-        if (p.isPublic) {
-          el.addEventListener('click', () => {
-            location.hash = 'p:' + p.id;
-            readPaste(null);
+        const link = location.origin + location.pathname + '#p:' + p.id;
+
+        if (p.isPublic && p.body) {
+          // Decrypt public paste inline
+          el.innerHTML = '<div class="dir-meta"><span class="dir-id">' + label + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span></div><div class="dir-preview">decrypting...</div><div class="dir-link"><input type="text" value="' + link + '" readonly onclick="this.select()"><button class="copy-dir-link">copy</button></div>';
+          directoryList.appendChild(el);
+          // Decrypt async
+          (async () => {
+            try {
+              const epoch = p.id.split('.')[0];
+              const key = await derivePubKey(epoch);
+              let payload = await decrypt(p.body, key);
+              const compressed = base64ToBuf(payload);
+              const text = await decompress(compressed);
+              const preview = text.length > 200 ? text.slice(0, 200) + '...' : text;
+              el.querySelector('.dir-preview').textContent = preview;
+            } catch (e) {
+              el.querySelector('.dir-preview').textContent = '[decrypt failed]';
+            }
+          })();
+          el.querySelector('.copy-dir-link').addEventListener('click', () => {
+            navigator.clipboard.writeText(link);
+            el.querySelector('.copy-dir-link').textContent = 'copied!';
+            setTimeout(() => { el.querySelector('.copy-dir-link').textContent = 'copy'; }, 2000);
           });
+        } else {
+          el.innerHTML = '<div class="dir-meta"><span class="dir-id">' + label + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span></div>';
+          directoryList.appendChild(el);
         }
-        directoryList.appendChild(el);
       }
     }
     log('Directory loaded');

@@ -107,7 +107,7 @@ export async function listPastes() {
       const colonIdx = inner.indexOf(':');
       const id = colonIdx > -1 ? inner.slice(0, colonIdx) : inner;
       const name = colonIdx > -1 ? inner.slice(colonIdx + 1) : '';
-      return { id, name, created: i.created_at, issueNumber: i.number, isPublic };
+      return { id, name, created: i.created_at, issueNumber: i.number, isPublic, body: i.body };
     });
 }
 

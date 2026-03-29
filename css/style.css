@@ -252,20 +252,55 @@ button:disabled {
 }
 
 .dir-entry {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  text-decoration: none;
+  padding: 0.6rem 0.75rem;
   font-size: 0.7rem;
-  transition: background 0.15s;
   border-bottom: 1px solid var(--border);
 }
 
 .dir-entry:last-child { border-bottom: none; }
 
-.dir-entry.clickable { cursor: pointer; }
-.dir-entry.clickable:hover { background: var(--surface); }
+.dir-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.dir-preview {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+  padding: 0.4rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin: 0.3rem 0;
+  max-height: 80px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.dir-link {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.dir-link input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.4rem;
+  outline: none;
+}
+
+.copy-dir-link {
+  font-size: 0.55rem;
+  padding: 0.2rem 0.4rem;
+}
 
 .dir-id {
   color: var(--accent);

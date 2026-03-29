@@ -48,6 +48,7 @@ const passwordSection = $('password-section');
 const directoryList = $('directory-list');
 const dirRefresh = $('dir-refresh');
 const pasteInput = $('paste-input');
+const pasteNameInput = $('paste-name');
 const createBtn = $('create-paste');
 const modeSelect = $('mode-select');
 const passwordInput = $('password-input');
@@ -207,7 +208,11 @@ createBtn.addEventListener('click', async () => {
 
     setStatus('Uploading to GitHub...');
     log('Posting paste to GitHub Issues...');
-    await createPaste(pasteId, payload, mode === 'public');
+    const pasteName = pasteNameInput.value.trim();
+    const now = new Date();
+    const timestamp = now.toISOString().slice(0, 16).replace('T', ' ');
+    const fullName = pasteName ? pasteName + ' - ' + timestamp : timestamp;
+    await createPaste(pasteId, payload, mode === 'public', fullName);
     log('Paste stored successfully');
 
     let fragment;
@@ -360,7 +365,8 @@ async function loadDirectory() {
         const frag = p.isPublic ? 'p:' + p.id : p.id;
         el.href = '#' + frag;
         const badge = p.isPublic ? '<span class="dir-badge pub">public</span>' : '<span class="dir-badge enc">encrypted</span>';
-        el.innerHTML = '<span class="dir-id">' + p.id + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span>';
+        const label = p.name || p.id;
+        el.innerHTML = '<span class="dir-id">' + label + '</span>' + badge + '<span class="dir-age">' + formatAge(p.created) + '</span>';
         if (p.isPublic) {
           el.addEventListener('click', (e) => {
             e.preventDefault();

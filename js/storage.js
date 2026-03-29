@@ -39,15 +39,16 @@ async function headers(write = false) {
   return h;
 }
 
-export async function createPaste(pasteId, payload, isPublic = false) {
+export async function createPaste(pasteId, payload, isPublic = false, name = '') {
   await init();
   const prefix = isPublic ? 'pub' : 'paste';
-  _log(`Creating [${prefix}:${pasteId}]...`);
+  const title = name ? `[${prefix}:${pasteId}:${name}]` : `[${prefix}:${pasteId}]`;
+  _log(`Creating ${title}...`);
   const res = await fetch(await apiUrl('/issues'), {
     method: 'POST',
     headers: await headers(true),
     body: JSON.stringify({
-      title: `[${prefix}:${pasteId}]`,
+      title: title,
       body: payload
     })
   });
@@ -62,10 +63,14 @@ export async function createPaste(pasteId, payload, isPublic = false) {
 
 export async function fetchPaste(pasteId) {
   await init();
-  const targets = [`[paste:${pasteId}]`, `[pub:${pasteId}]`];
   _log(`Fetching paste: ${pasteId}`);
 
-  // Paginate through all issues to find the paste
+  // Match [paste:id], [pub:id], [paste:id:name], [pub:id:name]
+  const matchId = (title) => {
+    const m = title.match(/^\[(paste|pub):([^:\]]+)/);
+    return m && m[2] === pasteId;
+  };
+
   let page = 1;
   while (page <= 10) {
     const res = await fetch(
@@ -75,7 +80,7 @@ export async function fetchPaste(pasteId) {
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const issues = await res.json();
     if (issues.length === 0) break;
-    const issue = issues.find(i => targets.includes(i.title));
+    const issue = issues.find(i => matchId(i.title));
     if (issue) {
       _log(`Found paste issue #${issue.number}`);
       return issue.body;
@@ -98,8 +103,11 @@ export async function listPastes() {
     .filter(i => i.title.startsWith('[paste:') || i.title.startsWith('[pub:'))
     .map(i => {
       const isPublic = i.title.startsWith('[pub:');
-      const id = isPublic ? i.title.slice(5, -1) : i.title.slice(7, -1);
-      return { id, created: i.created_at, issueNumber: i.number, isPublic };
+      const inner = i.title.slice(isPublic ? 5 : 7, -1); // id or id:name
+      const colonIdx = inner.indexOf(':');
+      const id = colonIdx > -1 ? inner.slice(0, colonIdx) : inner;
+      const name = colonIdx > -1 ? inner.slice(colonIdx + 1) : '';
+      return { id, name, created: i.created_at, issueNumber: i.number, isPublic };
     });
 }
 

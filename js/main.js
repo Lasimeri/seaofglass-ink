@@ -6,7 +6,7 @@ import {
 } from './crypto.js?v=1';
 import { createPaste, fetchPaste, setLogger } from './storage.js?v=1';
 import { compress, decompress } from './compress.js?v=1';
-import { getFingerprintKey } from './fingerprint.js?v=1';
+import { getFingerprintKey } from './fingerprint.js?v=2';
 
 // --- DOM ---
 const $ = (id) => document.getElementById(id);

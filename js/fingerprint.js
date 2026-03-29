@@ -1,4 +1,4 @@
-// fingerprint.js — Browser fingerprint → AES-256-GCM key derivation
+// fingerprint.js - Browser fingerprint to AES-256-GCM key derivation
 
 export async function getFingerprintKey() {
   const signals = [];

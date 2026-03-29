@@ -85,6 +85,19 @@ function base64ToBuf(b64) {
   return buf;
 }
 
+// Site-level rotating key for public pastes — data at rest is always encrypted
+// Key rotates monthly. Epoch stored in issue title so old pastes remain decryptable.
+const PUB_SEED = 'seaofglass.ink:pub:v1';
+function getPubEpoch() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+async function derivePubKey(epoch) {
+  const raw = new TextEncoder().encode(PUB_SEED + ':' + epoch);
+  const hash = await crypto.subtle.digest('SHA-256', raw);
+  return crypto.subtle.importKey('raw', hash, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
 async function derivePasswordKey(password, salt) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
@@ -146,9 +159,12 @@ createBtn.addEventListener('click', async () => {
     log('Base64 encoded: ' + payload.length + ' chars');
 
     if (mode === 'public') {
-      // Public: compress + base64 only, no encryption
+      const epoch = getPubEpoch();
+      setStatus('Deriving site key...');
+      log('Deriving rotating site key (epoch: ' + epoch + ')...');
+      mainKey = await derivePubKey(epoch);
       const randomBuf = crypto.getRandomValues(new Uint8Array(8));
-      pasteId = Array.from(randomBuf).map(b => b.toString(16).padStart(2, '0')).join('');
+      pasteId = epoch + '.' + Array.from(randomBuf).map(b => b.toString(16).padStart(2, '0')).join('');
       log('Public paste, ID: ' + pasteId);
     } else if (mode === 'device') {
       setStatus('Generating device key...');
@@ -166,22 +182,18 @@ createBtn.addEventListener('click', async () => {
       log('Shareable paste, ID: ' + pasteId);
     }
 
-    if (mode !== 'public') {
-      if (hasPassword) {
-        setStatus('Encrypting with password...');
-        log('Applying PBKDF2 password layer (100k iterations)...');
-        const pwKey = await derivePasswordKey(password, pasteId);
-        payload = await encrypt(payload, pwKey);
-        log('Password layer applied: ' + payload.length + ' chars');
-      }
-
-      setStatus('Encrypting...');
-      log('Applying main encryption layer...');
-      payload = await encrypt(payload, mainKey);
-      log('Encrypted: ' + payload.length + ' chars');
-    } else {
-      log('Public mode - no encryption applied');
+    if (hasPassword && mode !== 'public') {
+      setStatus('Encrypting with password...');
+      log('Applying PBKDF2 password layer (100k iterations)...');
+      const pwKey = await derivePasswordKey(password, pasteId);
+      payload = await encrypt(payload, pwKey);
+      log('Password layer applied: ' + payload.length + ' chars');
     }
+
+    setStatus('Encrypting...');
+    log('Applying ' + (mode === 'public' ? 'site' : 'main') + ' encryption layer...');
+    payload = await encrypt(payload, mainKey);
+    log('Encrypted: ' + payload.length + ' chars');
 
     setStatus('Uploading to GitHub...');
     log('Posting paste to GitHub Issues...');
@@ -224,7 +236,11 @@ async function readPaste(password) {
     let mainKey, pasteId;
     if (parsed.mode === 'public') {
       pasteId = parsed.pasteId;
-      log('Public paste, ID: ' + pasteId);
+      // Extract epoch from pasteId (format: YYYY-MM.hexhex)
+      const epoch = pasteId.split('.')[0];
+      setStatus('Deriving site key...');
+      log('Public paste, epoch: ' + epoch + ', ID: ' + pasteId);
+      mainKey = await derivePubKey(epoch);
     } else if (parsed.mode === 'device') {
       setStatus('Generating device key...');
       log('Deriving device key...');
@@ -252,21 +268,17 @@ async function readPaste(password) {
     let payload = await fetchPaste(pasteId);
     log('Paste fetched: ' + payload.length + ' chars');
 
-    if (parsed.mode !== 'public') {
-      setStatus('Decrypting...');
-      log('Decrypting main layer...');
-      payload = await decrypt(payload, mainKey);
-      log('Main layer decrypted');
+    setStatus('Decrypting...');
+    log('Decrypting ' + (parsed.mode === 'public' ? 'site' : 'main') + ' layer...');
+    payload = await decrypt(payload, mainKey);
+    log('Decrypted');
 
-      if (parsed.hasPassword) {
-        setStatus('Decrypting password layer...');
-        log('Decrypting PBKDF2 password layer...');
-        const pwKey = await derivePasswordKey(password, pasteId);
-        payload = await decrypt(payload, pwKey);
-        log('Password layer decrypted');
-      }
-    } else {
-      log('Public paste - no decryption needed');
+    if (parsed.hasPassword) {
+      setStatus('Decrypting password layer...');
+      log('Decrypting PBKDF2 password layer...');
+      const pwKey = await derivePasswordKey(password, pasteId);
+      payload = await decrypt(payload, pwKey);
+      log('Password layer decrypted');
     }
 
     setStatus('Decompressing...');
@@ -278,7 +290,7 @@ async function readPaste(password) {
     decryptedEl.textContent = text;
     readSection.classList.remove('hidden');
     passwordSection.classList.add('hidden');
-    setStatus(parsed.mode === 'public' ? 'Public paste loaded' : 'Paste decrypted');
+    setStatus('Paste loaded');
     log('Done');
 
   } catch (err) {

@@ -18,13 +18,25 @@
     <div id="status"></div>
 
     <div id="create-section">
-      <div class="editor-pane">
-        <span class="pane-label">editor</span>
-        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
-        <div class="char-count">
-          <span id="char-count">0 chars</span>
-          <span id="line-count">1 line</span>
+      <div class="editor-split">
+        <div class="editor-pane">
+          <span class="pane-label">editor</span>
+          <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
+          <div class="char-count">
+            <span id="char-count">0 chars</span>
+            <span id="line-count">1 line</span>
+          </div>
         </div>
+        <div id="dir-panel" class="dir-panel hidden">
+          <div class="dir-panel-header">
+            <span>pastes</span>
+            <button id="dir-close" class="dir-close-btn">&times;</button>
+          </div>
+          <div id="directory-list" class="dir-panel-body"></div>
+        </div>
+      </div>
+      <div class="editor-toolbar">
+        <button id="dir-toggle" class="toolbar-btn" title="Browse pastes">pastes</button>
       </div>
 
       <div class="options-row">
@@ -60,14 +72,10 @@
       <button id="copy-text">Copy</button>
     </div>
 
-    <div id="directory-section" class="hidden">
-      <p class="section-label">-- recent pastes --</p>
-      <div id="directory-list"></div>
-    </div>
 
     <div id="log" class="log-panel"></div>
   </div>
 
-  <script type="module" src="js/main.js?v=6"></script>
+  <script type="module" src="js/main.js?v=7"></script>
 </body>
 </html>

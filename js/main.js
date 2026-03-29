@@ -45,8 +45,10 @@ const createSection = $('create-section');
 const shareSection = $('share-section');
 const readSection = $('read-section');
 const passwordSection = $('password-section');
-const directorySection = $('directory-section');
+const dirPanel = $('dir-panel');
 const directoryList = $('directory-list');
+const dirToggle = $('dir-toggle');
+const dirClose = $('dir-close');
 const pasteInput = $('paste-input');
 const createBtn = $('create-paste');
 const modeSelect = $('mode-select');
@@ -342,8 +344,12 @@ copyTextBtn.addEventListener('click', () => {
   setTimeout(() => { copyTextBtn.textContent = 'Copy'; }, 2000);
 });
 
-// --- Paste Directory ---
+// --- Paste Directory Panel ---
+let dirLoaded = false;
+
 async function loadDirectory() {
+  if (dirLoaded) return;
+  directoryList.innerHTML = '<div class="dir-empty">loading...</div>';
   log('Loading paste directory...');
   try {
     const pastes = await listPastes();
@@ -368,16 +374,25 @@ async function loadDirectory() {
         directoryList.appendChild(el);
       }
     }
-    directorySection.classList.remove('hidden');
+    dirLoaded = true;
     log(pastes.length + ' paste(s) in directory');
   } catch (err) {
+    directoryList.innerHTML = '<div class="dir-empty">failed to load</div>';
     log('Directory error: ' + err.message);
   }
 }
 
+function toggleDir() {
+  const open = dirPanel.classList.toggle('hidden');
+  dirToggle.classList.toggle('active', !open);
+  if (!open) return; // closing
+  loadDirectory();
+}
+
+dirToggle.addEventListener('click', toggleDir);
+dirClose.addEventListener('click', toggleDir);
+
 // --- Init ---
 if (location.hash.length > 1) {
   readPaste(null);
-} else {
-  loadDirectory();
 }

@@ -45,11 +45,8 @@ const createSection = $('create-section');
 const shareSection = $('share-section');
 const readSection = $('read-section');
 const passwordSection = $('password-section');
-const dirPanel = $('dir-panel');
 const directoryList = $('directory-list');
-const dirToggle = $('dir-toggle');
-const dirClose = $('dir-close');
-const dirLogEl = $('dir-log');
+const dirRefresh = $('dir-refresh');
 const pasteInput = $('paste-input');
 const createBtn = $('create-paste');
 const modeSelect = $('mode-select');
@@ -345,25 +342,14 @@ copyTextBtn.addEventListener('click', () => {
   setTimeout(() => { copyTextBtn.textContent = 'Copy'; }, 2000);
 });
 
-// --- Paste Directory Panel ---
-let dirLoaded = false;
-
-function dirLog(msg) {
-  const line = document.createElement('div');
-  line.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
-  dirLogEl.appendChild(line);
-  dirLogEl.scrollTop = dirLogEl.scrollHeight;
-}
-
+// --- Paste Directory ---
 async function loadDirectory() {
-  if (dirLoaded) return;
-  dirLogEl.innerHTML = '';
   directoryList.innerHTML = '<div class="dir-empty">loading...</div>';
-  dirLog('Connecting to GitHub...');
+  log('Loading paste directory...');
   try {
-    dirLog('Fetching paste index...');
+    log('Fetching paste index...');
     const pastes = await listPastes();
-    dirLog('Found ' + pastes.length + ' paste(s)');
+    log('Found ' + pastes.length + ' paste(s)');
     if (pastes.length === 0) {
       directoryList.innerHTML = '<div class="dir-empty">no pastes yet</div>';
     } else {
@@ -378,8 +364,6 @@ async function loadDirectory() {
         if (p.isPublic) {
           el.addEventListener('click', (e) => {
             e.preventDefault();
-            dirPanel.classList.add('hidden');
-            dirToggle.classList.remove('active');
             location.hash = 'p:' + p.id;
             readPaste(null);
           });
@@ -387,22 +371,14 @@ async function loadDirectory() {
         directoryList.appendChild(el);
       }
     }
-    dirLoaded = true;
-    dirLog('Directory loaded');
+    log('Directory loaded');
   } catch (err) {
     directoryList.innerHTML = '<div class="dir-empty">failed to load</div>';
-    dirLog('Error: ' + err.message);
+    log('Directory error: ' + err.message);
   }
 }
 
-function toggleDir() {
-  const isHidden = dirPanel.classList.toggle('hidden');
-  dirToggle.classList.toggle('active', !isHidden);
-  if (!isHidden) loadDirectory();
-}
-
-dirToggle.addEventListener('click', toggleDir);
-dirClose.addEventListener('click', toggleDir);
+dirRefresh.addEventListener('click', loadDirectory);
 
 // --- Init ---
 if (location.hash.length > 1) {

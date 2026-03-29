@@ -28,14 +28,6 @@ body {
   width: 100%;
 }
 
-/* Header row — title left, pastes button right */
-.header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
-}
-
 h1 {
   font-size: 1.1rem;
   font-weight: 400;
@@ -49,25 +41,8 @@ h1 span { color: var(--accent); }
 .subtitle {
   font-size: 0.7rem;
   color: var(--text-dim);
+  margin-bottom: 2rem;
   opacity: 0.6;
-}
-
-.dir-toggle-btn {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  background: var(--surface);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  padding: 0.4rem 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-top: 0.2rem;
-}
-
-.dir-toggle-btn:hover,
-.dir-toggle-btn.active {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 #status {
@@ -77,7 +52,7 @@ h1 span { color: var(--accent); }
   min-height: 1.2em;
 }
 
-/* Editor frame */
+/* ===== Editor ===== */
 .editor-frame {
   border: 1px solid var(--border);
   margin-bottom: 0.75rem;
@@ -88,7 +63,7 @@ h1 span { color: var(--accent); }
   font-size: 0.8rem;
   line-height: 1.5;
   width: 100%;
-  min-height: 360px;
+  min-height: 300px;
   background: var(--bg);
   color: var(--text);
   border: none;
@@ -121,7 +96,7 @@ h1 span { color: var(--accent); }
   border-top: 1px solid var(--border);
 }
 
-/* Options row — inline with button */
+/* ===== Options row ===== */
 .options-row {
   display: flex;
   gap: 0.5rem;
@@ -148,11 +123,9 @@ h1 span { color: var(--accent); }
   color: var(--text);
 }
 
-.options-row button {
-  flex-shrink: 0;
-}
+.options-row button { flex-shrink: 0; }
 
-/* Buttons */
+/* ===== Buttons ===== */
 button {
   font-family: var(--mono);
   font-size: 0.8rem;
@@ -174,7 +147,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Share / password sections */
+/* ===== Share / password ===== */
 .hint {
   font-size: 0.7rem;
   color: var(--text-dim);
@@ -199,7 +172,7 @@ button:disabled {
 
 .share-row input:focus { border-color: var(--accent); }
 
-/* Read section */
+/* ===== Read section ===== */
 #decrypted-text {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -214,94 +187,82 @@ button:disabled {
   margin-bottom: 0.75rem;
 }
 
-/* Log panel */
-.log-panel {
-  margin-top: 1.5rem;
-  padding: 0.75rem;
-  background: var(--surface);
+/* ===== Log box ===== */
+.log-box {
+  margin-top: 2rem;
   border: 1px solid var(--border);
+}
+
+.log-header {
+  padding: 0.4rem 0.75rem;
   font-size: 0.6rem;
   color: var(--text-dim);
-  max-height: 150px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.1em;
+  text-transform: lowercase;
+}
+
+.log-body {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  background: var(--bg);
+  max-height: 140px;
   overflow-y: auto;
   line-height: 1.6;
-  min-height: 2rem;
+  min-height: 2.5rem;
 }
 
-/* ===== Directory overlay panel (right side) ===== */
-.dir-overlay {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 320px;
-  height: 100vh;
-  background: var(--bg);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  z-index: 100;
-  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+/* ===== Paste list box ===== */
+.paste-list-box {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
 }
 
-.dir-overlay.hidden {
-  display: none !important;
-}
-
-.dir-header {
+.paste-list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.25rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.6rem;
+  color: var(--text-dim);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  font-size: 0.75rem;
-  color: var(--text-dim);
   letter-spacing: 0.1em;
-  flex-shrink: 0;
 }
 
-.dir-header button {
-  font-size: 1.1rem;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  line-height: 1;
-}
-
-.dir-header button:hover { color: var(--accent); }
-
-.dir-log {
-  padding: 0.5rem 1rem;
+.refresh-btn {
   font-size: 0.55rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  background: transparent;
   color: var(--text-dim);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  max-height: 80px;
-  overflow-y: auto;
-  line-height: 1.5;
-  flex-shrink: 0;
 }
 
-.dir-log:empty { display: none; }
+.refresh-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
 
-.dir-list {
-  flex: 1;
+.paste-list-body {
+  background: var(--bg);
+  max-height: 250px;
   overflow-y: auto;
-  padding: 0.5rem 0;
 }
 
 .dir-entry {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.6rem 1.25rem;
+  padding: 0.5rem 0.75rem;
   text-decoration: none;
   font-size: 0.7rem;
   transition: background 0.15s;
   border-bottom: 1px solid var(--border);
 }
+
+.dir-entry:last-child { border-bottom: none; }
 
 .dir-entry:hover { background: var(--surface); }
 
@@ -338,18 +299,17 @@ button:disabled {
 }
 
 .dir-empty {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: var(--text-dim);
   opacity: 0.5;
-  padding: 1.5rem 1.25rem;
+  padding: 1rem 0.75rem;
   text-align: center;
 }
 
 .hidden { display: none !important; }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
   body { padding: 1.25rem; }
   .options-row { flex-direction: column; }
-  .dir-overlay { width: 100%; }
 }

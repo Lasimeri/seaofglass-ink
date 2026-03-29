@@ -12,13 +12,8 @@
 </head>
 <body>
   <div class="container">
-    <div class="header-row">
-      <div>
-        <h1><span>sea of glass</span> / ink</h1>
-        <p class="subtitle">encrypted pastebin - serverless, zero trust</p>
-      </div>
-      <button id="dir-toggle" class="dir-toggle-btn" title="Browse pastes">pastes</button>
-    </div>
+    <h1><span>sea of glass</span> / ink</h1>
+    <p class="subtitle">encrypted pastebin - serverless, zero trust</p>
 
     <div id="status"></div>
 
@@ -63,19 +58,22 @@
       <button id="copy-text">Copy</button>
     </div>
 
-    <div id="log" class="log-panel"></div>
-  </div>
-
-  <!-- Directory overlay panel -->
-  <div id="dir-panel" class="dir-overlay hidden">
-    <div class="dir-header">
-      <span>pastes</span>
-      <button id="dir-close">&times;</button>
+    <div class="log-box">
+      <div class="log-header">log</div>
+      <div id="log" class="log-body"></div>
     </div>
-    <div id="dir-log" class="dir-log"></div>
-    <div id="directory-list" class="dir-list"></div>
+
+    <div class="paste-list-box">
+      <div class="paste-list-header">
+        <span>public pastes</span>
+        <button id="dir-refresh" class="refresh-btn">refresh</button>
+      </div>
+      <div id="directory-list" class="paste-list-body">
+        <div class="dir-empty">click refresh to load</div>
+      </div>
+    </div>
   </div>
 
-  <script type="module" src="js/main.js?v=8"></script>
+  <script type="module" src="js/main.js?v=9"></script>
 </body>
 </html>

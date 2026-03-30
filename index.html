@@ -5,95 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>sea of glass - ink</title>
   <meta property="og:title" content="sea of glass - ink">
-  <meta property="og:description" content="encrypted pastebin - serverless, zero trust">
+  <meta property="og:description" content="encrypted pastebin - retired">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#0a0a0f">
-  <link rel="stylesheet" href="css/style.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      background: #0a0a0f;
+      color: #c4945a;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+    }
+    .container { max-width: 500px; text-align: center; }
+    h1 { font-size: 1.1rem; font-weight: 400; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    h1 span { color: #8a6a3e; }
+    .status { font-size: 0.75rem; color: #8a6a3e; margin-bottom: 2rem; }
+    .link { font-size: 0.7rem; }
+    .link a { color: #c4945a; text-decoration: none; }
+    .link a:hover { text-decoration: underline; }
+  </style>
 </head>
 <body>
   <div class="container">
     <h1><span>sea of glass</span> / ink</h1>
-    <p class="subtitle">encrypted pastebin - serverless, zero trust</p>
-
-    <div id="status"></div>
-
-    <div id="create-section">
-      <div class="editor-frame">
-        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
-        <div class="editor-footer">
-          <span id="char-count">0 chars</span>
-          <span id="line-count">1 line</span>
-        </div>
-      </div>
-
-      <div class="format-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="ittybitty-toggle">
-          <span>ittybitty page</span>
-        </label>
-      </div>
-
-      <div class="options-row">
-        <input type="text" id="paste-name" placeholder="name (optional)">
-        <select id="mode-select">
-          <option value="shareable">shareable</option>
-          <option value="public">public</option>
-          <option value="device">device-bound</option>
-        </select>
-        <input type="password" id="password-input" placeholder="password (optional)">
-        <button id="create-paste">encrypt & save</button>
-      </div>
-    </div>
-
-    <div class="action-zone">
-      <div id="share-section" class="hidden">
-        <p class="hint">share this link - the encryption key is in the fragment</p>
-        <div class="share-row">
-          <input type="text" id="share-link" readonly>
-          <button id="copy-link">Copy</button>
-        </div>
-      </div>
-
-      <div id="password-section" class="hidden">
-        <p class="hint">this paste requires a password</p>
-        <div class="share-row">
-          <input type="password" id="read-password" placeholder="enter password">
-          <button id="read-password-btn">Decrypt</button>
-        </div>
-      </div>
-
-      <div id="read-section" class="hidden">
-        <pre id="decrypted-text"></pre>
-        <button id="copy-text">Copy</button>
-      </div>
-
-      <div id="render-section" class="hidden">
-        <div class="render-header">
-          <span id="render-type">html</span>
-          <span id="render-title"></span>
-        </div>
-        <div class="render-frame">
-          <iframe id="render-iframe" sandbox="allow-scripts" referrerpolicy="no-referrer"></iframe>
-        </div>
-      </div>
-    </div>
-
-    <div class="log-box">
-      <div class="log-header">log</div>
-      <div id="log" class="log-body"></div>
-    </div>
-
-    <div class="paste-list-box">
-      <div class="paste-list-header">
-        <span>public pastes</span>
-        <button id="dir-refresh" class="refresh-btn">refresh</button>
-      </div>
-      <div id="directory-list" class="paste-list-body">
-        <div class="dir-empty">click refresh to load</div>
-      </div>
-    </div>
+    <p class="status">this service has been retired</p>
+    <p class="link"><a href="https://seaof.glass">&larr; seaof.glass</a></p>
   </div>
-
-  <script type="module" src="js/main.js?v=15"></script>
 </body>
 </html>

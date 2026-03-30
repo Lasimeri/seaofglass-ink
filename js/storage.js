@@ -15,7 +15,7 @@ export async function store(data, title, mode, publicKey) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `store failed: ${res.status}`);
   }
-  return res.json();
+  return res.json(); // { id, deleteToken }
 }
 
 export async function load(id) {
@@ -26,16 +26,16 @@ export async function load(id) {
   if (!res.ok) throw new Error(`dns fetch failed: ${res.status}`);
   const dns = await res.json();
   if (!dns.Answer || !dns.Answer.length) throw new Error('paste not found');
-  // DoH returns TXT data as a JSON-encoded string (double-quoted, escaped)
-  // First JSON.parse unwraps the outer quoting, second parses our envelope
   let raw = dns.Answer[0].data;
-  try { raw = JSON.parse(raw); } catch { /* strip quotes manually */ raw = raw.replace(/^"|"$/g, ''); }
+  try { raw = JSON.parse(raw); } catch { raw = raw.replace(/^"|"$/g, ''); }
   try { return JSON.parse(raw); }
   catch { return { d: raw, m: 'link', c: 0 }; }
 }
 
-export async function remove(id) {
-  const res = await fetch(`${WORKER_URL}/paste/${id}`, { method: 'DELETE' });
+export async function remove(id, deleteToken) {
+  const res = await fetch(`${WORKER_URL}/paste/${id}?token=${encodeURIComponent(deleteToken)}`, {
+    method: 'DELETE',
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `delete failed: ${res.status}`);

@@ -42,13 +42,20 @@ function err(msg: string, status = 400): Response {
 	return json({ error: msg }, status);
 }
 
+async function sha256hex(input: string): Promise<string> {
+	const data = new TextEncoder().encode(input);
+	const hash = await crypto.subtle.digest('SHA-256', data);
+	return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // TXT record JSON envelope:
-// { d: ciphertext, t?: title, m: "link"|"password"|"public", c: unix_ts, k?: public_key }
-function buildRecord(data: string, title: string | null, mode: string, publicKey?: string): string {
+// { d, t?, m, c, k?, h } — h = SHA-256 of delete token
+function buildRecord(data: string, title: string | null, mode: string, deleteHash: string, publicKey?: string): string {
 	const rec: Record<string, unknown> = {
 		d: data,
 		m: mode,
 		c: Math.floor(Date.now() / 1000),
+		h: deleteHash,
 	};
 	if (title) rec.t = title;
 	if (publicKey) rec.k = publicKey;
@@ -122,22 +129,37 @@ export default {
 			if (!data || typeof data !== 'string') return err('missing data');
 			if (!['link', 'password', 'public'].includes(mode)) return err('invalid mode');
 
-			const record = buildRecord(data, title || null, mode, mode === 'public' ? publicKey : undefined);
+			const id = crypto.randomUUID().slice(0, 8);
+			const deleteToken = crypto.randomUUID();
+			const deleteHash = await sha256hex(deleteToken);
+
+			const record = buildRecord(data, title || null, mode, deleteHash, mode === 'public' ? publicKey : undefined);
 			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
 
-			const id = crypto.randomUUID().slice(0, 8);
 			const ok = await dnsCreate(env, id, record);
 			if (!ok) return err('storage failed', 500);
 
-			return json({ id }, 201);
+			return json({ id, deleteToken }, 201);
 		}
 
-		// DELETE /paste/:id
+		// DELETE /paste/:id?token=xxx
 		if (request.method === 'DELETE' && url.pathname.startsWith('/paste/')) {
 			const id = url.pathname.slice(7);
 			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+
+			const token = url.searchParams.get('token');
+			if (!token) return err('missing delete token', 403);
+
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
+
+			// Validate delete token against stored hash
+			const tokenHash = await sha256hex(token);
+			let parsed: any;
+			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
+
+			if (parsed.h !== tokenHash) return err('invalid delete token', 403);
+
 			for (const rec of records) await dnsDelete(env, rec.id);
 			return json({ deleted: true });
 		}

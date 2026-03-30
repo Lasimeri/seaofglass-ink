@@ -55,20 +55,46 @@
         <span id="size-limit" class="size-limit"></span>
       </div>
 
-      <!-- Share output -->
-      <div id="share-section" class="share-section hidden">
-        <p class="hint">share this link &mdash; the key is in the fragment (never sent to a server)</p>
-        <div class="share-row">
-          <input type="text" id="share-link" readonly>
-          <button id="copy-link">copy</button>
+    </div>
+
+    <!-- Admin section (new tab after creation) -->
+    <div id="admin-section" class="hidden">
+      <div class="read-meta">
+        <div id="admin-title" class="read-title"></div>
+        <div id="admin-date" class="read-date"></div>
+      </div>
+
+      <div id="admin-password-prompt" class="hidden">
+        <p class="decrypt-label">enter your password to view</p>
+        <div class="decrypt-row">
+          <input type="password" id="admin-prompt-password" placeholder="password" autocomplete="off">
+          <button id="admin-prompt-decrypt">decrypt</button>
+        </div>
+        <div id="admin-prompt-error" class="error-text hidden"></div>
+      </div>
+
+      <div id="admin-content" class="hidden">
+        <div class="read-frame">
+          <pre id="admin-text"></pre>
         </div>
         <div class="share-actions">
-          <button id="delete-btn" class="danger-btn hidden">delete paste</button>
+          <button id="admin-copy-text">copy text</button>
+        </div>
+      </div>
+
+      <div class="share-section">
+        <p class="hint">share this link &mdash; the key is in the fragment (never sent to a server)</p>
+        <div class="share-row">
+          <input type="text" id="admin-share-link" readonly>
+          <button id="admin-copy-link">copy</button>
+        </div>
+        <div class="share-actions">
+          <button id="admin-delete" class="danger-btn">delete paste</button>
         </div>
       </div>
     </div>
 
-    <!-- Read section -->
+    <!-- Read section (share link view) -->
     <div id="read-section" class="hidden">
       <div class="read-meta">
         <div id="read-title" class="read-title"></div>
@@ -108,6 +134,6 @@
     </div>
   </div>
 
-  <script type="module" src="js/main.js?v=2"></script>
+  <script type="module" src="js/main.js?v=3"></script>
 </body>
 </html>

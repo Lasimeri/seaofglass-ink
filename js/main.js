@@ -270,7 +270,7 @@ async function loadDirectory() {
       return;
     }
     dirList.innerHTML = pastes.map(p => `
-      <a href="/#${p.id}:${p.key}" class="dir-entry">
+      <a href="/#${p.id}:${p.key}" target="_blank" rel="noopener" class="dir-entry">
         <span class="dir-title">${esc(p.title)}</span>
         <span class="dir-date">${fmtDate(p.created)}</span>
       </a>

@@ -6,11 +6,11 @@ interface Env {
 const CF_API = 'https://api.cloudflare.com/client/v4';
 const DOMAIN = 'seaofglass.ink';
 const ALLOWED_ORIGIN = `https://${DOMAIN}`;
-const MAX_DATA_LEN = 3500; // ~2.6KB raw ciphertext after base64
+const MAX_RECORD_LEN = 3500;
 
-// Simple in-memory rate limiter (per-isolate, resets on cold start)
+// Rate limiter (per-isolate, resets on cold start)
 const rateMap = new Map<string, number[]>();
-const RATE_LIMIT = 10; // requests per minute per IP
+const RATE_LIMIT = 10;
 const RATE_WINDOW = 60_000;
 
 function rateOk(ip: string): boolean {
@@ -25,7 +25,7 @@ function rateOk(ip: string): boolean {
 function cors(res: Response): Response {
 	const h = new Headers(res.headers);
 	h.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-	h.set('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+	h.set('Access-Control-Allow-Methods', 'POST, DELETE, GET, OPTIONS');
 	h.set('Access-Control-Allow-Headers', 'Content-Type');
 	h.set('Access-Control-Max-Age', '86400');
 	return new Response(res.body, { status: res.status, headers: h });
@@ -42,6 +42,19 @@ function err(msg: string, status = 400): Response {
 	return json({ error: msg }, status);
 }
 
+// TXT record JSON envelope:
+// { d: ciphertext, t?: title, m: "link"|"password"|"public", c: unix_ts, k?: public_key }
+function buildRecord(data: string, title: string | null, mode: string, publicKey?: string): string {
+	const rec: Record<string, unknown> = {
+		d: data,
+		m: mode,
+		c: Math.floor(Date.now() / 1000),
+	};
+	if (title) rec.t = title;
+	if (publicKey) rec.k = publicKey;
+	return JSON.stringify(rec);
+}
+
 async function dnsCreate(env: Env, name: string, content: string): Promise<boolean> {
 	const res = await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records`, {
 		method: 'POST',
@@ -49,30 +62,43 @@ async function dnsCreate(env: Env, name: string, content: string): Promise<boole
 			'Authorization': `Bearer ${env.CF_API_TOKEN}`,
 			'Content-Type': 'application/json',
 		},
-		body: JSON.stringify({
-			type: 'TXT',
-			name: `${name}.d.${DOMAIN}`,
-			content,
-			ttl: 1,
-		}),
+		body: JSON.stringify({ type: 'TXT', name: `${name}.d.${DOMAIN}`, content, ttl: 1 }),
 	});
 	return res.ok;
 }
 
-async function dnsFindAndDelete(env: Env, name: string): Promise<boolean> {
-	const listRes = await fetch(
+async function dnsFind(env: Env, name: string): Promise<any[]> {
+	const res = await fetch(
 		`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records?name=${name}.d.${DOMAIN}&type=TXT`,
 		{ headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}` } },
 	);
-	const list: any = await listRes.json();
-	if (!list.result?.length) return false;
-	for (const rec of list.result) {
-		await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records/${rec.id}`, {
-			method: 'DELETE',
-			headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}` },
-		});
+	const data: any = await res.json();
+	return data.result || [];
+}
+
+async function dnsDelete(env: Env, recordId: string): Promise<void> {
+	await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records/${recordId}`, {
+		method: 'DELETE',
+		headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}` },
+	});
+}
+
+async function dnsListAll(env: Env): Promise<any[]> {
+	let allRecords: any[] = [];
+	let page = 1;
+	while (true) {
+		const res = await fetch(
+			`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records?type=TXT&per_page=100&page=${page}`,
+			{ headers: { 'Authorization': `Bearer ${env.CF_API_TOKEN}` } },
+		);
+		const data: any = await res.json();
+		const records = data.result || [];
+		const matching = records.filter((r: any) => r.name.endsWith(`.d.${DOMAIN}`));
+		allRecords = allRecords.concat(matching);
+		if (records.length < 100) break;
+		page++;
 	}
-	return true;
+	return allRecords;
 }
 
 export default {
@@ -92,23 +118,50 @@ export default {
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
-			const { data } = body;
+			const { data, title, mode, key: publicKey } = body;
 			if (!data || typeof data !== 'string') return err('missing data');
-			if (data.length > MAX_DATA_LEN) return err('paste too large (max ~2.5KB)', 413);
+			if (!['link', 'password', 'public'].includes(mode)) return err('invalid mode');
+
+			const record = buildRecord(data, title || null, mode, mode === 'public' ? publicKey : undefined);
+			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
 
 			const id = crypto.randomUUID().slice(0, 8);
-			const ok = await dnsCreate(env, id, data);
+			const ok = await dnsCreate(env, id, record);
 			if (!ok) return err('storage failed', 500);
 
 			return json({ id }, 201);
 		}
 
-		// DELETE /paste/:id — delete paste
+		// DELETE /paste/:id
 		if (request.method === 'DELETE' && url.pathname.startsWith('/paste/')) {
 			const id = url.pathname.slice(7);
 			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
-			const ok = await dnsFindAndDelete(env, id);
-			return ok ? json({ deleted: true }) : err('not found', 404);
+			const records = await dnsFind(env, id);
+			if (!records.length) return err('not found', 404);
+			for (const rec of records) await dnsDelete(env, rec.id);
+			return json({ deleted: true });
+		}
+
+		// GET /public — list public pastes
+		if (request.method === 'GET' && url.pathname === '/public') {
+			const records = await dnsListAll(env);
+			const publicPastes: any[] = [];
+			for (const rec of records) {
+				try {
+					const parsed = JSON.parse(rec.content);
+					if (parsed.m === 'public') {
+						const id = rec.name.split('.')[0];
+						publicPastes.push({
+							id,
+							title: parsed.t || id,
+							created: parsed.c,
+							key: parsed.k || null,
+						});
+					}
+				} catch { /* skip */ }
+			}
+			publicPastes.sort((a, b) => b.created - a.created);
+			return json({ pastes: publicPastes });
 		}
 
 		return err('not found', 404);

@@ -5,19 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>sea of glass - ink</title>
   <meta property="og:title" content="sea of glass - ink">
-  <meta property="og:description" content="encrypted pastebin - dns-backed, zero trust">
+  <meta property="og:description" content="encrypted pastebin — dns-backed, zero trust">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#0a0a0f">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="container">
-    <h1><span>sea of glass</span> / ink</h1>
-    <p class="subtitle">encrypted pastebin &mdash; dns-backed, zero trust</p>
+    <header>
+      <h1>ink <span>sea of glass</span></h1>
+      <p class="subtitle">encrypted pastebin &mdash; dns-backed, zero trust</p>
+    </header>
 
     <div id="status" class="status"></div>
 
+    <!-- Create section -->
     <div id="create-section">
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <input type="text" id="title-input" placeholder="title (optional)">
+        </div>
+        <div class="toolbar-group">
+          <select id="mode-select" title="Paste mode">
+            <option value="link">link-only</option>
+            <option value="password">password</option>
+            <option value="public">public</option>
+          </select>
+          <button id="create-btn">encrypt &amp; save</button>
+        </div>
+      </div>
+
+      <div id="password-row" class="password-row hidden">
+        <input type="password" id="password-input" placeholder="password" autocomplete="off">
+      </div>
+
       <div class="editor-frame">
         <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
         <div class="editor-footer">
@@ -26,29 +47,67 @@
         </div>
       </div>
 
-      <div class="action-row">
-        <button id="create-btn">encrypt &amp; save</button>
+      <div class="size-bar">
+        <span id="size-raw">raw: 0 B</span>
+        <span id="size-compressed">deflate: 0 B</span>
+        <span id="size-encrypted">aes-gcm: 0 B</span>
+        <span id="size-encoded">base64: 0 B</span>
+        <span id="size-limit" class="size-limit"></span>
       </div>
 
-      <div id="share-section" class="hidden">
+      <!-- Share output -->
+      <div id="share-section" class="share-section hidden">
         <p class="hint">share this link &mdash; the key is in the fragment (never sent to a server)</p>
         <div class="share-row">
           <input type="text" id="share-link" readonly>
           <button id="copy-link">copy</button>
         </div>
+        <div class="share-actions">
+          <button id="delete-btn" class="danger-btn hidden">delete paste</button>
+        </div>
       </div>
     </div>
 
+    <!-- Read section -->
     <div id="read-section" class="hidden">
+      <div class="read-meta">
+        <div id="read-title" class="read-title"></div>
+        <div id="read-date" class="read-date"></div>
+      </div>
       <div class="read-frame">
         <pre id="decrypted-text"></pre>
       </div>
-      <div class="action-row">
-        <button id="copy-text">copy</button>
+      <button id="copy-text">copy</button>
+    </div>
+
+    <!-- Password prompt -->
+    <div id="password-prompt" class="hidden">
+      <div class="read-meta">
+        <div id="prompt-title" class="read-title"></div>
+        <div id="prompt-date" class="read-date"></div>
+      </div>
+      <p class="decrypt-label">this paste is password protected</p>
+      <div class="decrypt-row">
+        <input type="password" id="prompt-password" placeholder="password" autocomplete="off">
+        <button id="prompt-decrypt">decrypt</button>
+      </div>
+      <div id="prompt-error" class="error-text hidden"></div>
+    </div>
+
+    <hr class="sep">
+
+    <!-- Public directory -->
+    <div class="dir-box">
+      <div class="dir-header">
+        <span class="dir-label">public pastes</span>
+        <button id="dir-refresh">refresh</button>
+      </div>
+      <div id="directory-list" class="dir-body">
+        <div class="dir-empty">click refresh to load</div>
       </div>
     </div>
   </div>
 
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=2"></script>
 </body>
 </html>

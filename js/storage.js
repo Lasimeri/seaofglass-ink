@@ -26,7 +26,10 @@ export async function load(id) {
   if (!res.ok) throw new Error(`dns fetch failed: ${res.status}`);
   const dns = await res.json();
   if (!dns.Answer || !dns.Answer.length) throw new Error('paste not found');
-  const raw = dns.Answer[0].data.replace(/^"|"$/g, '');
+  // DoH returns TXT data as a JSON-encoded string (double-quoted, escaped)
+  // First JSON.parse unwraps the outer quoting, second parses our envelope
+  let raw = dns.Answer[0].data;
+  try { raw = JSON.parse(raw); } catch { /* strip quotes manually */ raw = raw.replace(/^"|"$/g, ''); }
   try { return JSON.parse(raw); }
   catch { return { d: raw, m: 'link', c: 0 }; }
 }

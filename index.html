@@ -12,11 +12,14 @@
 </head>
 <body>
   <div class="container">
+
+    <!-- Header -->
     <header>
       <h1>ink <span>sea of glass</span></h1>
       <p class="subtitle">encrypted pastebin &mdash; dns-backed, zero trust</p>
     </header>
 
+    <!-- Status bar -->
     <div id="status" class="status"></div>
 
     <!-- Create section -->
@@ -54,10 +57,9 @@
         <span id="size-encoded">base64: 0 B</span>
         <span id="size-limit" class="size-limit"></span>
       </div>
-
     </div>
 
-    <!-- Admin section (new tab after creation) -->
+    <!-- Admin section (shown after paste creation) -->
     <div id="admin-section" class="hidden">
       <div class="read-meta">
         <div id="admin-title" class="read-title"></div>
@@ -106,7 +108,7 @@
       <button id="copy-text">copy</button>
     </div>
 
-    <!-- Password prompt -->
+    <!-- Password prompt (reader password mode) -->
     <div id="password-prompt" class="hidden">
       <div class="read-meta">
         <div id="prompt-title" class="read-title"></div>
@@ -132,8 +134,9 @@
         <div class="dir-empty">click refresh to load</div>
       </div>
     </div>
+
   </div>
 
-  <script type="module" src="js/main.js?v=6"></script>
+  <script type="module" src="js/main.js?v=7"></script>
 </body>
 </html>

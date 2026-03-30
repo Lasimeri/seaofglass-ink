@@ -1,7 +1,15 @@
+// ─────────────────────────────────────────────
+// Types & Interfaces
+// ─────────────────────────────────────────────
+
 interface Env {
 	CF_API_TOKEN: string;
 	CF_ZONE_ID: string;
 }
+
+// ─────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────
 
 const CF_API = 'https://api.cloudflare.com/client/v4';
 const DOMAIN = 'seaofglass.ink';
@@ -9,11 +17,16 @@ const ALLOWED_ORIGIN = `https://${DOMAIN}`;
 const MAX_RECORD_LEN = 3500;
 const DELETE_TTL = 600; // 10 minutes — delete token expires after this
 
-// Rate limiter (per-isolate, resets on cold start)
+// Rate limiting (per-isolate, resets on cold start)
 const rateMap = new Map<string, number[]>();
 const RATE_LIMIT = 10;
 const RATE_WINDOW = 60_000;
 
+// ─────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────
+
+/** Sliding-window rate limiter keyed by IP */
 function rateOk(ip: string): boolean {
 	const now = Date.now();
 	const hits = (rateMap.get(ip) || []).filter(t => now - t < RATE_WINDOW);
@@ -23,6 +36,7 @@ function rateOk(ip: string): boolean {
 	return true;
 }
 
+/** Attach CORS headers to a response */
 function cors(res: Response): Response {
 	const h = new Headers(res.headers);
 	h.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
@@ -32,6 +46,7 @@ function cors(res: Response): Response {
 	return new Response(res.body, { status: res.status, headers: h });
 }
 
+/** JSON response with CORS */
 function json(data: unknown, status = 200): Response {
 	return cors(new Response(JSON.stringify(data), {
 		status,
@@ -39,18 +54,22 @@ function json(data: unknown, status = 200): Response {
 	}));
 }
 
+/** Error response shorthand */
 function err(msg: string, status = 400): Response {
 	return json({ error: msg }, status);
 }
 
+/** SHA-256 hex digest of a string */
 async function sha256hex(input: string): Promise<string> {
 	const data = new TextEncoder().encode(input);
 	const hash = await crypto.subtle.digest('SHA-256', data);
 	return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// TXT record JSON envelope:
-// { d, t?, m, c, k?, h } — h = SHA-256 of delete token
+/**
+ * Build TXT record JSON envelope.
+ * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=deleteHash
+ */
 function buildRecord(data: string, title: string | null, mode: string, deleteHash: string, publicKey?: string): string {
 	const rec: Record<string, unknown> = {
 		d: data,
@@ -63,6 +82,11 @@ function buildRecord(data: string, title: string | null, mode: string, deleteHas
 	return JSON.stringify(rec);
 }
 
+// ─────────────────────────────────────────────
+// DNS Operations (Cloudflare API)
+// ─────────────────────────────────────────────
+
+/** Create a TXT record under <id>.d.seaofglass.ink */
 async function dnsCreate(env: Env, name: string, content: string): Promise<boolean> {
 	const res = await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records`, {
 		method: 'POST',
@@ -75,6 +99,7 @@ async function dnsCreate(env: Env, name: string, content: string): Promise<boole
 	return res.ok;
 }
 
+/** Find TXT records for a given paste ID */
 async function dnsFind(env: Env, name: string): Promise<any[]> {
 	const res = await fetch(
 		`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records?name=${name}.d.${DOMAIN}&type=TXT`,
@@ -84,6 +109,7 @@ async function dnsFind(env: Env, name: string): Promise<any[]> {
 	return data.result || [];
 }
 
+/** Delete a DNS record by ID */
 async function dnsDelete(env: Env, recordId: string): Promise<void> {
 	await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records/${recordId}`, {
 		method: 'DELETE',
@@ -91,6 +117,7 @@ async function dnsDelete(env: Env, recordId: string): Promise<void> {
 	});
 }
 
+/** Update a DNS record in place */
 async function dnsUpdate(env: Env, recordId: string, name: string, content: string): Promise<boolean> {
 	const res = await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records/${recordId}`, {
 		method: 'PUT',
@@ -103,6 +130,7 @@ async function dnsUpdate(env: Env, recordId: string, name: string, content: stri
 	return res.ok;
 }
 
+/** Paginate all TXT records under *.d.seaofglass.ink */
 async function dnsListAll(env: Env): Promise<any[]> {
 	let allRecords: any[] = [];
 	let page = 1;
@@ -121,18 +149,24 @@ async function dnsListAll(env: Env): Promise<any[]> {
 	return allRecords;
 }
 
+// ─────────────────────────────────────────────
+// Route Handlers
+// ─────────────────────────────────────────────
+
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 
+		// CORS preflight
 		if (request.method === 'OPTIONS') {
 			return cors(new Response(null, { status: 204 }));
 		}
 
+		// Rate limiting
 		const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
 		if (!rateOk(ip)) return err('rate limited', 429);
 
-		// POST /store — create paste
+		// POST /store — create a new paste
 		if (request.method === 'POST' && url.pathname === '/store') {
 			let body: any;
 			try { body = await request.json(); }
@@ -155,7 +189,7 @@ export default {
 			return json({ id, deleteToken }, 201);
 		}
 
-		// DELETE /paste/:id?token=xxx
+		// DELETE /paste/:id?token=xxx — delete a paste by ID with valid token
 		if (request.method === 'DELETE' && url.pathname.startsWith('/paste/')) {
 			const id = url.pathname.slice(7);
 			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
@@ -184,7 +218,7 @@ export default {
 			return json({ deleted: true });
 		}
 
-		// POST /revoke/:id — revoke delete capability (called via sendBeacon on tab close)
+		// POST /revoke/:id — permanently revoke delete capability (called via sendBeacon on tab close)
 		if (request.method === 'POST' && url.pathname.startsWith('/revoke/')) {
 			const id = url.pathname.slice(8);
 			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
@@ -218,14 +252,17 @@ export default {
 		if (request.method === 'GET' && url.pathname.startsWith('/read/')) {
 			const id = url.pathname.slice(6);
 			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
+
 			let parsed: any;
 			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
+
 			return json(parsed);
 		}
 
-		// GET /public — list public pastes
+		// GET /public — list all public pastes, newest first
 		if (request.method === 'GET' && url.pathname === '/public') {
 			const records = await dnsListAll(env);
 			const publicPastes: any[] = [];
@@ -241,7 +278,7 @@ export default {
 							key: parsed.k || null,
 						});
 					}
-				} catch { /* skip */ }
+				} catch { /* skip malformed records */ }
 			}
 			publicPastes.sort((a, b) => b.created - a.created);
 			return json({ pastes: publicPastes });

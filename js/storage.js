@@ -1,6 +1,10 @@
+// DNS-backed paste storage via Cloudflare Worker + DoH
+
 export const WORKER_URL = 'https://sea-ink.seaofglass.workers.dev';
 const DOH_URL = 'https://cloudflare-dns.com/dns-query';
 const DOMAIN = 'seaofglass.ink';
+
+// --- Write operations ---
 
 export async function store(data, title, mode, publicKey) {
   const body = { data, mode };
@@ -18,7 +22,19 @@ export async function store(data, title, mode, publicKey) {
   return res.json(); // { id, deleteToken }
 }
 
-// Read via worker CF API (no propagation delay — used for admin tab)
+export async function remove(id, deleteToken) {
+  const res = await fetch(`${WORKER_URL}/paste/${id}?token=${encodeURIComponent(deleteToken)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `delete failed: ${res.status}`);
+  }
+}
+
+// --- Read operations ---
+
+// Direct read via worker CF API (no propagation delay — used for admin tab)
 export async function loadDirect(id) {
   const res = await fetch(`${WORKER_URL}/read/${id}`);
   if (!res.ok) {
@@ -43,15 +59,7 @@ export async function load(id) {
   catch { return { d: raw, m: 'link', c: 0 }; }
 }
 
-export async function remove(id, deleteToken) {
-  const res = await fetch(`${WORKER_URL}/paste/${id}?token=${encodeURIComponent(deleteToken)}`, {
-    method: 'DELETE',
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `delete failed: ${res.status}`);
-  }
-}
+// --- Public directory ---
 
 export async function listPublic() {
   const res = await fetch(`${WORKER_URL}/public`);

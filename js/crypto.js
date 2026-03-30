@@ -1,6 +1,8 @@
 // AES-256-GCM encrypt/decrypt
-// Pipeline: plaintext → compress (deflate) → encrypt → base64url
+// Pipeline: plaintext -> compress (deflate) -> encrypt -> base64url
 // Compression UNDER encryption so ciphertext is smaller
+
+// --- Key management ---
 
 export async function generateKey() {
   return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
@@ -16,7 +18,8 @@ export async function importKey(encoded) {
   return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
 }
 
-// Link/public mode: random key
+// --- Link/public mode: random key ---
+
 export async function encrypt(plaintext, key) {
   const compressed = await compress(new TextEncoder().encode(plaintext));
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -35,7 +38,8 @@ export async function decrypt(encoded, key) {
   return new TextDecoder().decode(await decompress(new Uint8Array(decrypted)));
 }
 
-// Password mode: PBKDF2 → AES-GCM
+// --- Password mode: PBKDF2 -> AES-GCM ---
+
 export async function encryptWithPassword(plaintext, password) {
   const compressed = await compress(new TextEncoder().encode(plaintext));
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -71,7 +75,8 @@ async function deriveKey(password, salt) {
   );
 }
 
-// Compression
+// --- Compression (deflate) ---
+
 async function compress(data) {
   const cs = new CompressionStream('deflate');
   const w = cs.writable.getWriter();
@@ -88,7 +93,8 @@ async function decompress(data) {
   return new Uint8Array(await new Response(ds.readable).arrayBuffer());
 }
 
-// Size estimation for the calculator
+// --- Size estimation ---
+
 export async function estimateSizes(plaintext) {
   const raw = new TextEncoder().encode(plaintext);
   const compressed = await compress(raw);
@@ -96,6 +102,8 @@ export async function estimateSizes(plaintext) {
   const encoded = Math.ceil(encrypted * 4 / 3);
   return { raw: raw.byteLength, compressed: compressed.byteLength, encrypted, encoded };
 }
+
+// --- Base64url encoding ---
 
 export function base64url(buf) {
   return btoa(String.fromCharCode(...buf))

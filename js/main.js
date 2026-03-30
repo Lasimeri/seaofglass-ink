@@ -2,12 +2,13 @@ import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes,
-} from './crypto.js?v=2';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=2';
+} from './crypto.js?v=3';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=3';
 
 const $ = s => document.querySelector(s);
 
-// Parse the URL fragment to determine view mode
+// --- URL fragment routing ---
+
 function parseFragment() {
   const hash = location.hash.slice(1);
   if (!hash) return { mode: 'create' };
@@ -45,6 +46,7 @@ function parseFragment() {
 const route = parseFragment();
 
 // --- Shared helpers ---
+
 function log(msg, isError) {
   const el = $('#status');
   if (el) { el.textContent = msg; el.className = isError ? 'status error' : 'status'; }
@@ -70,6 +72,7 @@ function esc(s) {
 // ============================================================
 // CREATE MODE — editor, size calc, creates paste + opens admin tab
 // ============================================================
+
 if (route.mode === 'create') {
   const editor = $('#paste-input');
   const charCount = $('#char-count');
@@ -129,8 +132,8 @@ if (route.mode === 'create') {
     const mode = modeSelect.value;
     if (mode === 'password' && !passwordInput.value) return log('password required', true);
 
-    // Open blank tab SYNCHRONOUSLY within the click gesture (before any await)
-    // This prevents popup blockers from killing it
+    // Open blank tab synchronously within the click gesture (before any await)
+    // to prevent popup blockers from killing it
     const adminTab = window.open('about:blank', '_blank');
 
     createBtn.disabled = true;
@@ -184,6 +187,7 @@ if (route.mode === 'create') {
 // ============================================================
 // ADMIN MODE — shows paste + share link + delete button
 // ============================================================
+
 if (route.mode === 'admin' || route.mode === 'admin-password') {
   const createSection = $('#create-section');
   const adminSection = $('#admin-section');
@@ -289,7 +293,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   // Revoke delete token when admin tab closes
   // sendBeacon is reliable during page unload (unlike fetch)
   function revokeToken() {
-    if (deleted) return; // already deleted, nothing to revoke
+    if (deleted) return;
     const body = JSON.stringify({ token: route.deleteToken });
     navigator.sendBeacon(`${WORKER_URL}/revoke/${route.id}`, new Blob([body], { type: 'application/json' }));
   }
@@ -300,6 +304,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
 // ============================================================
 // READ MODE — shows decrypted paste only
 // ============================================================
+
 if (route.mode === 'read') {
   const createSection = $('#create-section');
   const readSection = $('#read-section');
@@ -333,6 +338,7 @@ if (route.mode === 'read') {
 // ============================================================
 // PASSWORD READ MODE
 // ============================================================
+
 if (route.mode === 'password') {
   const createSection = $('#create-section');
   const passwordPrompt = $('#password-prompt');
@@ -392,6 +398,7 @@ if (route.mode === 'password') {
 // ============================================================
 // PUBLIC DIRECTORY — always visible
 // ============================================================
+
 const dirList = $('#directory-list');
 const dirRefresh = $('#dir-refresh');
 

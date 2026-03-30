@@ -3,7 +3,7 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes,
 } from './crypto.js';
-import { store, load, remove, revoke, listPublic, WORKER_URL } from './storage.js';
+import { store, load, remove, listPublic, WORKER_URL } from './storage.js';
 
 const $ = s => document.querySelector(s);
 

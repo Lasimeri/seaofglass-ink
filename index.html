@@ -5,35 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>sea of glass - ink</title>
   <meta property="og:title" content="sea of glass - ink">
-  <meta property="og:description" content="encrypted pastebin - retired">
+  <meta property="og:description" content="encrypted pastebin - dns-backed, zero trust">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#0a0a0f">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
-      background: #0a0a0f;
-      color: #c4945a;
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 2rem;
-    }
-    .container { max-width: 500px; text-align: center; }
-    h1 { font-size: 1.1rem; font-weight: 400; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
-    h1 span { color: #8a6a3e; }
-    .status { font-size: 0.75rem; color: #8a6a3e; margin-bottom: 2rem; }
-    .link { font-size: 0.7rem; }
-    .link a { color: #c4945a; text-decoration: none; }
-    .link a:hover { text-decoration: underline; }
-  </style>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div class="container">
     <h1><span>sea of glass</span> / ink</h1>
-    <p class="status">this service has been retired</p>
-    <p class="link"><a href="https://seaof.glass">&larr; seaof.glass</a></p>
+    <p class="subtitle">encrypted pastebin &mdash; dns-backed, zero trust</p>
+
+    <div id="status" class="status"></div>
+
+    <div id="create-section">
+      <div class="editor-frame">
+        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
+        <div class="editor-footer">
+          <span id="char-count">0 chars</span>
+          <span id="line-count">1 line</span>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button id="create-btn">encrypt &amp; save</button>
+      </div>
+
+      <div id="share-section" class="hidden">
+        <p class="hint">share this link &mdash; the key is in the fragment (never sent to a server)</p>
+        <div class="share-row">
+          <input type="text" id="share-link" readonly>
+          <button id="copy-link">copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="read-section" class="hidden">
+      <div class="read-frame">
+        <pre id="decrypted-text"></pre>
+      </div>
+      <div class="action-row">
+        <button id="copy-text">copy</button>
+      </div>
+    </div>
   </div>
+
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

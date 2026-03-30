@@ -1,0 +1,153 @@
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --border: #1e1e2e;
+  --text: #c4945a;
+  --text-dim: #8a6a3e;
+  --accent: #c4945a;
+  --accent-dim: #7a5c38;
+  --success: #4ade80;
+  --error: #f87171;
+  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--mono);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.container {
+  max-width: 700px;
+  width: 100%;
+}
+
+h1 {
+  font-size: 1.1rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+h1 span { color: var(--text-dim); }
+
+.subtitle {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-bottom: 1.5rem;
+}
+
+.status {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  min-height: 1.2em;
+  margin-bottom: 1rem;
+}
+
+.status.error { color: var(--error); }
+
+/* Editor */
+.editor-frame {
+  border: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 200px;
+  background: var(--bg);
+  color: var(--text);
+  border: none;
+  padding: 1rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  resize: vertical;
+  outline: none;
+}
+
+textarea::placeholder { color: var(--accent-dim); }
+
+.editor-footer {
+  display: flex;
+  gap: 1rem;
+  padding: 0.4rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+
+/* Buttons */
+button {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover { background: var(--border); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.action-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Share section */
+.share-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.share-row input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.5rem;
+  outline: none;
+}
+
+.hint {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+}
+
+/* Read section */
+.read-frame {
+  border: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+
+.read-frame pre {
+  padding: 1rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 100px;
+  color: var(--text);
+}
+
+/* Hidden */
+.hidden { display: none; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  body { padding: 1.25rem; }
+  .action-row { flex-direction: column; }
+  .share-row { flex-direction: column; }
+}

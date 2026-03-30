@@ -2,8 +2,8 @@ import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes,
-} from './crypto.js';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js';
+} from './crypto.js?v=2';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=2';
 
 const $ = s => document.querySelector(s);
 

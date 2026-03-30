@@ -129,6 +129,10 @@ if (route.mode === 'create') {
     const mode = modeSelect.value;
     if (mode === 'password' && !passwordInput.value) return log('password required', true);
 
+    // Open blank tab SYNCHRONOUSLY within the click gesture (before any await)
+    // This prevents popup blockers from killing it
+    const adminTab = window.open('about:blank', '_blank');
+
     createBtn.disabled = true;
     log('encrypting...');
 
@@ -147,7 +151,7 @@ if (route.mode === 'create') {
       const title = titleInput.value.trim() || null;
       const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined);
 
-      // Build admin URL (with delete token) and open in new tab
+      // Build admin URL and navigate the pre-opened tab
       let adminUrl;
       if (mode === 'password') {
         adminUrl = `${location.origin}/#ap:${result.id}:${result.deleteToken}`;
@@ -155,14 +159,22 @@ if (route.mode === 'create') {
         adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${result.deleteToken}`;
       }
 
-      window.open(adminUrl, '_blank');
-      log('paste created — opened in new tab');
+      if (adminTab) {
+        adminTab.location.href = adminUrl;
+      } else {
+        // Fallback: navigate current page if popup was still blocked
+        location.href = adminUrl;
+      }
+
+      log('paste created');
       editor.value = '';
       charCount.textContent = '0 chars';
       lineCount.textContent = '1 line';
       calcSizes();
     } catch (e) {
       log(e.message, true);
+      // Close the blank tab if creation failed
+      if (adminTab) adminTab.close();
     } finally {
       createBtn.disabled = false;
     }

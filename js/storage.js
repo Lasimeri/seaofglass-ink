@@ -18,6 +18,17 @@ export async function store(data, title, mode, publicKey) {
   return res.json(); // { id, deleteToken }
 }
 
+// Read via worker CF API (no propagation delay — used for admin tab)
+export async function loadDirect(id) {
+  const res = await fetch(`${WORKER_URL}/read/${id}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `read failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+// Read via DoH (cached at edge — used for share links)
 export async function load(id) {
   const name = `${id}.d.${DOMAIN}`;
   const res = await fetch(`${DOH_URL}?name=${encodeURIComponent(name)}&type=TXT`, {

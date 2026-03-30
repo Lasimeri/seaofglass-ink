@@ -214,6 +214,17 @@ export default {
 			return json({ revoked: true });
 		}
 
+		// GET /read/:id — read paste directly from CF API (bypasses DNS propagation delay)
+		if (request.method === 'GET' && url.pathname.startsWith('/read/')) {
+			const id = url.pathname.slice(6);
+			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+			const records = await dnsFind(env, id);
+			if (!records.length) return err('not found', 404);
+			let parsed: any;
+			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
+			return json(parsed);
+		}
+
 		// GET /public — list public pastes
 		if (request.method === 'GET' && url.pathname === '/public') {
 			const records = await dnsListAll(env);

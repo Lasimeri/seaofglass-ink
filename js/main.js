@@ -3,7 +3,7 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes,
 } from './crypto.js';
-import { store, load, remove, listPublic, WORKER_URL } from './storage.js';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js';
 
 const $ = s => document.querySelector(s);
 
@@ -191,9 +191,9 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   const adminPromptError = $('#admin-prompt-error');
   const adminContent = $('#admin-content');
 
-  log('fetching from dns...');
+  log('fetching paste...');
 
-  load(route.id).then(async record => {
+  loadDirect(route.id).then(async record => {
     if (record.t) adminTitle.textContent = record.t;
     if (record.c) adminDate.textContent = fmtDate(record.c);
 

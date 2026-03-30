@@ -294,11 +294,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
     navigator.sendBeacon(`${WORKER_URL}/revoke/${route.id}`, new Blob([body], { type: 'application/json' }));
   }
 
-  window.addEventListener('beforeunload', revokeToken);
-  // Also revoke if tab is backgrounded on mobile (may not fire beforeunload)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') revokeToken();
-  });
+  window.addEventListener('pagehide', revokeToken);
 }
 
 // ============================================================

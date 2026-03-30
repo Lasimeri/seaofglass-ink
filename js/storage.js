@@ -1,4 +1,4 @@
-const WORKER_URL = 'https://sea-ink.seaofglass.workers.dev';
+export const WORKER_URL = 'https://sea-ink.seaofglass.workers.dev';
 const DOH_URL = 'https://cloudflare-dns.com/dns-query';
 const DOMAIN = 'seaofglass.ink';
 

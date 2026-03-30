@@ -7,6 +7,7 @@ const CF_API = 'https://api.cloudflare.com/client/v4';
 const DOMAIN = 'seaofglass.ink';
 const ALLOWED_ORIGIN = `https://${DOMAIN}`;
 const MAX_RECORD_LEN = 3500;
+const DELETE_TTL = 600; // 10 minutes — delete token expires after this
 
 // Rate limiter (per-isolate, resets on cold start)
 const rateMap = new Map<string, number[]>();
@@ -90,6 +91,18 @@ async function dnsDelete(env: Env, recordId: string): Promise<void> {
 	});
 }
 
+async function dnsUpdate(env: Env, recordId: string, name: string, content: string): Promise<boolean> {
+	const res = await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records/${recordId}`, {
+		method: 'PUT',
+		headers: {
+			'Authorization': `Bearer ${env.CF_API_TOKEN}`,
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify({ type: 'TXT', name, content, ttl: 1 }),
+	});
+	return res.ok;
+}
+
 async function dnsListAll(env: Env): Promise<any[]> {
 	let allRecords: any[] = [];
 	let page = 1;
@@ -153,15 +166,52 @@ export default {
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
 
-			// Validate delete token against stored hash
-			const tokenHash = await sha256hex(token);
 			let parsed: any;
 			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
 
+			// Check if delete capability has been revoked
+			if (!parsed.h) return err('delete token revoked', 403);
+
+			// Check TTL — token expires DELETE_TTL seconds after paste creation
+			const now = Math.floor(Date.now() / 1000);
+			if (parsed.c && (now - parsed.c) > DELETE_TTL) return err('delete token expired', 403);
+
+			// Validate delete token against stored hash
+			const tokenHash = await sha256hex(token);
 			if (parsed.h !== tokenHash) return err('invalid delete token', 403);
 
 			for (const rec of records) await dnsDelete(env, rec.id);
 			return json({ deleted: true });
+		}
+
+		// POST /revoke/:id — revoke delete capability (called via sendBeacon on tab close)
+		if (request.method === 'POST' && url.pathname.startsWith('/revoke/')) {
+			const id = url.pathname.slice(8);
+			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+
+			let body: any;
+			try { body = await request.json(); } catch { return err('invalid json'); }
+			const { token } = body;
+			if (!token) return err('missing token', 403);
+
+			const records = await dnsFind(env, id);
+			if (!records.length) return err('not found', 404);
+
+			let parsed: any;
+			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
+
+			if (!parsed.h) return json({ revoked: true }); // already revoked
+
+			// Validate token before revoking
+			const tokenHash = await sha256hex(token);
+			if (parsed.h !== tokenHash) return err('invalid token', 403);
+
+			// Remove hash from record — delete is now permanently disabled
+			delete parsed.h;
+			const updated = JSON.stringify(parsed);
+			await dnsUpdate(env, records[0].id, records[0].name, updated);
+
+			return json({ revoked: true });
 		}
 
 		// GET /public — list public pastes

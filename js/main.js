@@ -3,7 +3,7 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes,
 } from './crypto.js';
-import { store, load, remove, listPublic } from './storage.js';
+import { store, load, remove, revoke, listPublic, WORKER_URL } from './storage.js';
 
 const $ = s => document.querySelector(s);
 
@@ -257,11 +257,13 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   });
 
   // Delete
+  let deleted = false;
   adminDeleteBtn.addEventListener('click', async () => {
     adminDeleteBtn.disabled = true;
     log('deleting...');
     try {
       await remove(route.id, route.deleteToken);
+      deleted = true;
       log('paste deleted');
       adminContent.classList.add('hidden');
       adminShareLink.value = '';
@@ -270,6 +272,20 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
       log(e.message, true);
       adminDeleteBtn.disabled = false;
     }
+  });
+
+  // Revoke delete token when admin tab closes
+  // sendBeacon is reliable during page unload (unlike fetch)
+  function revokeToken() {
+    if (deleted) return; // already deleted, nothing to revoke
+    const body = JSON.stringify({ token: route.deleteToken });
+    navigator.sendBeacon(`${WORKER_URL}/revoke/${route.id}`, new Blob([body], { type: 'application/json' }));
+  }
+
+  window.addEventListener('beforeunload', revokeToken);
+  // Also revoke if tab is backgrounded on mobile (may not fire beforeunload)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') revokeToken();
   });
 }
 

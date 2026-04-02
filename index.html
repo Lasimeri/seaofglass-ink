@@ -8,9 +8,13 @@
   <meta property="og:description" content="encrypted pastebin — dns-backed, zero trust">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#0a0a0f">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1L15 8L8 15L1 8Z' fill='%23c4945a'/%3E%3C/svg%3E">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://sea-ink.seaofglass.workers.dev https://cloudflare-dns.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <noscript><div style="color:#c4945a;padding:2rem;font-family:monospace;text-align:center">javascript is required for client-side encryption</div></noscript>
   <div class="container">
 
     <!-- Header -->
@@ -26,10 +30,10 @@
     <div id="create-section">
       <div class="toolbar">
         <div class="toolbar-group">
-          <input type="text" id="title-input" placeholder="title (optional)">
+          <input type="text" id="title-input" placeholder="title (optional)" aria-label="Paste title">
         </div>
         <div class="toolbar-group">
-          <select id="mode-select" title="Paste mode">
+          <select id="mode-select" title="Paste mode" aria-label="Encryption mode">
             <option value="link">link-only</option>
             <option value="password">password</option>
             <option value="public">public</option>
@@ -39,11 +43,11 @@
       </div>
 
       <div id="password-row" class="password-row hidden">
-        <input type="password" id="password-input" placeholder="password" autocomplete="off">
+        <input type="password" id="password-input" placeholder="password" autocomplete="off" aria-label="Encryption password" enterkeyhint="done">
       </div>
 
       <div class="editor-frame">
-        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false"></textarea>
+        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false" aria-label="Paste content" enterkeyhint="enter"></textarea>
         <div class="editor-footer">
           <span id="char-count">0 chars</span>
           <span id="line-count">1 line</span>
@@ -69,7 +73,7 @@
       <div id="admin-password-prompt" class="hidden">
         <p class="decrypt-label">enter your password to view</p>
         <div class="decrypt-row">
-          <input type="password" id="admin-prompt-password" placeholder="password" autocomplete="off">
+          <input type="password" id="admin-prompt-password" placeholder="password" autocomplete="off" aria-label="Decryption password" enterkeyhint="done">
           <button id="admin-prompt-decrypt">decrypt</button>
         </div>
         <div id="admin-prompt-error" class="error-text hidden"></div>
@@ -87,10 +91,11 @@
       <div class="share-section">
         <p class="hint">share this link &mdash; the key is in the fragment (never sent to a server)</p>
         <div class="share-row">
-          <input type="text" id="admin-share-link" readonly>
+          <input type="text" id="admin-share-link" readonly aria-label="Share link">
           <button id="admin-copy-link">copy</button>
         </div>
         <div class="share-actions">
+          <a href="/" class="create-link">create another</a>
           <button id="admin-delete" class="danger-btn">delete paste</button>
         </div>
       </div>
@@ -116,11 +121,21 @@
       </div>
       <p class="decrypt-label">this paste is password protected</p>
       <div class="decrypt-row">
-        <input type="password" id="prompt-password" placeholder="password" autocomplete="off">
+        <input type="password" id="prompt-password" placeholder="password" autocomplete="off" aria-label="Decryption password" enterkeyhint="done">
         <button id="prompt-decrypt">decrypt</button>
       </div>
       <div id="prompt-error" class="error-text hidden"></div>
     </div>
+
+    <details class="how-it-works">
+      <summary>how it works</summary>
+      <div class="how-content">
+        <p><strong>link-only</strong> — AES-256-GCM encrypted. key lives in the URL fragment, never sent to any server.</p>
+        <p><strong>password</strong> — encrypted with your password via PBKDF2 (100k iterations). no key in the URL.</p>
+        <p><strong>public</strong> — encrypted at rest but key is stored alongside data. anyone with the link can read.</p>
+        <p>pastes are stored as DNS TXT records. the static page is the only way to decrypt them.</p>
+      </div>
+    </details>
 
     <hr class="sep">
 

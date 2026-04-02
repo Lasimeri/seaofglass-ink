@@ -7,6 +7,9 @@ interface Env {
 	CF_ZONE_ID: string;
 }
 
+// CF_API_TOKEN should be scoped to: Zone → DNS → Edit
+// for the seaofglass.ink zone only. Do not use a global API key.
+
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
@@ -75,7 +78,7 @@ function buildRecord(data: string, title: string | null, mode: string, deleteHas
 	const rec: Record<string, unknown> = {
 		d: data,
 		m: mode,
-		c: Math.floor(Date.now() / 1000),
+		c: Math.floor(Date.now() / 3600000) * 3600,
 		h: deleteHash,
 	};
 	if (title) rec.t = title;
@@ -131,7 +134,9 @@ async function dnsUpdate(env: Env, recordId: string, name: string, content: stri
 	return res.ok;
 }
 
-/** Paginate all TXT records under *.d.seaofglass.ink */
+/** Paginate all TXT records under *.d.seaofglass.ink
+ *  CF API doesn't support wildcard name filtering — must fetch all TXT and filter client-side.
+ *  /public response is cached at edge (30s) to mitigate the cost. */
 async function dnsListAll(env: Env): Promise<any[]> {
 	let allRecords: any[] = [];
 	let page = 1;
@@ -214,7 +219,8 @@ export default {
 			if (!parsed.h) return err('delete token revoked', 403);
 
 			// Check TTL — token expires DELETE_TTL seconds after paste creation
-			const now = Math.floor(Date.now() / 1000);
+			// Timestamp is hour-rounded, so compare with same rounding to preserve the window
+			const now = Math.floor(Date.now() / 3600000) * 3600;
 			if (parsed.c && (now - parsed.c) > DELETE_TTL) return err('delete token expired', 403);
 
 			// Validate delete token against stored hash
@@ -289,7 +295,10 @@ export default {
 				} catch { /* skip malformed records */ }
 			}
 			publicPastes.sort((a, b) => b.created - a.created);
-			return json({ pastes: publicPastes });
+			const res = json({ pastes: publicPastes });
+			const headers = new Headers(res.headers);
+			headers.set('Cache-Control', 'public, max-age=30');
+			return new Response(res.body, { status: res.status, headers });
 		}
 
 		return err('not found', 404);

@@ -49,7 +49,10 @@ const route = parseFragment();
 
 function log(msg, isError) {
   const el = $('#status');
-  if (el) { el.textContent = msg; el.className = isError ? 'status error' : 'status'; }
+  if (el) {
+    el.textContent = isError ? '\u2715 ' + msg : msg;
+    el.className = isError ? 'status error' : 'status';
+  }
 }
 
 function fmt(n) {
@@ -65,10 +68,27 @@ function fmtDate(ts) {
   });
 }
 
+function fmtRelative(ts) {
+  if (!ts) return '';
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+  return fmtDate(ts);
+}
+
 function esc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+// Double-click password fields to toggle visibility
+document.querySelectorAll('input[type="password"]').forEach(input => {
+  input.addEventListener('dblclick', () => {
+    input.type = input.type === 'password' ? 'text' : 'password';
+  });
+});
 
 // ============================================================
 // CREATE MODE — editor, size calc, creates paste + opens admin tab
@@ -100,6 +120,26 @@ if (route.mode === 'create') {
     lineCount.textContent = `${v.split('\n').length} lines`;
     clearTimeout(sizeDebounce);
     sizeDebounce = setTimeout(calcSizes, 300);
+    localStorage.setItem('ink-draft', v);
+  });
+
+  // Restore draft
+  const saved = localStorage.getItem('ink-draft');
+  if (saved) { editor.value = saved; editor.dispatchEvent(new Event('input')); }
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      editor.value = editor.value.substring(0, start) + '\t' + editor.value.substring(end);
+      editor.selectionStart = editor.selectionEnd = start + 1;
+      editor.dispatchEvent(new Event('input'));
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      createBtn.click();
+    }
   });
 
   async function calcSizes() {
@@ -171,12 +211,14 @@ if (route.mode === 'create') {
       if (adminTab) {
         adminTab.location.href = adminUrl;
       } else {
-        // Fallback: navigate current page if popup was still blocked
-        location.href = adminUrl;
+        // Popup blocked — copy admin link and stay on create page
+        navigator.clipboard.writeText(adminUrl).catch(() => {});
+        log('popup blocked \u2014 admin link copied to clipboard');
       }
 
       log('paste created');
       editor.value = '';
+      localStorage.removeItem('ink-draft');
       charCount.textContent = '0 chars';
       lineCount.textContent = '1 line';
       calcSizes();
@@ -219,6 +261,24 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   loadDirect(route.id).then(async record => {
     if (record.c) adminDate.textContent = fmtDate(record.c);
 
+    // Delete TTL countdown
+    if (record.c) {
+      const expiresAt = record.c + 600; // DELETE_TTL = 600 seconds
+      const updateCountdown = () => {
+        const remaining = expiresAt - Math.floor(Date.now() / 1000);
+        if (remaining <= 0) {
+          adminDeleteBtn.disabled = true;
+          adminDeleteBtn.textContent = 'delete expired';
+          return;
+        }
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        adminDeleteBtn.textContent = `delete paste (${mins}:${String(secs).padStart(2, '0')})`;
+        setTimeout(updateCountdown, 1000);
+      };
+      updateCountdown();
+    }
+
     if (route.mode === 'admin') {
       // Build reader share link (no delete token)
       adminShareLink.value = `${location.origin}/#${route.id}:${route.key}`;
@@ -260,7 +320,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           adminContent.classList.remove('hidden');
           log('');
         } catch {
-          adminPromptError.textContent = 'wrong password';
+          adminPromptError.textContent = '\u2715 wrong password';
           adminPromptError.classList.remove('hidden');
         } finally {
           adminPromptBtn.disabled = false;
@@ -275,20 +335,29 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   // Copy link
   adminCopyLink.addEventListener('click', () => {
     navigator.clipboard.writeText(adminShareLink.value);
-    adminCopyLink.textContent = 'copied';
+    adminCopyLink.textContent = '\u2713 copied';
+    setTimeout(() => adminCopyLink.textContent = 'copy', 1500);
+  });
+
+  // Share link tap-to-copy
+  adminShareLink.addEventListener('click', () => {
+    adminShareLink.select();
+    navigator.clipboard.writeText(adminShareLink.value);
+    adminCopyLink.textContent = '\u2713 copied';
     setTimeout(() => adminCopyLink.textContent = 'copy', 1500);
   });
 
   // Copy text
   adminCopyText.addEventListener('click', () => {
     navigator.clipboard.writeText(adminText.textContent);
-    adminCopyText.textContent = 'copied';
+    adminCopyText.textContent = '\u2713 copied';
     setTimeout(() => adminCopyText.textContent = 'copy', 1500);
   });
 
   // Delete
   let deleted = false;
   adminDeleteBtn.addEventListener('click', async () => {
+    if (!confirm('delete this paste permanently?')) return;
     adminDeleteBtn.disabled = true;
     log('deleting...');
     try {
@@ -348,7 +417,7 @@ if (route.mode === 'read') {
 
   copyTextBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(decryptedText.textContent);
-    copyTextBtn.textContent = 'copied';
+    copyTextBtn.textContent = '\u2713 copied';
     setTimeout(() => copyTextBtn.textContent = 'copy', 1500);
   });
 }
@@ -400,7 +469,7 @@ if (route.mode === 'password') {
         decryptedText.textContent = text;
         log('decrypted');
       } catch {
-        promptError.textContent = 'wrong password';
+        promptError.textContent = '\u2715 wrong password';
         promptError.classList.remove('hidden');
       } finally {
         promptBtn.disabled = false;
@@ -413,7 +482,7 @@ if (route.mode === 'password') {
 
   copyTextBtn.addEventListener('click', () => {
     navigator.clipboard.writeText($('#decrypted-text').textContent);
-    copyTextBtn.textContent = 'copied';
+    copyTextBtn.textContent = '\u2713 copied';
     setTimeout(() => copyTextBtn.textContent = 'copy', 1500);
   });
 }
@@ -425,23 +494,42 @@ if (route.mode === 'password') {
 const dirList = $('#directory-list');
 const dirRefresh = $('#dir-refresh');
 
+// Add search filter
+const dirSearch = document.createElement('input');
+dirSearch.type = 'text';
+dirSearch.placeholder = 'filter...';
+dirSearch.className = 'dir-search';
+dirSearch.setAttribute('aria-label', 'Filter public pastes');
+document.querySelector('.dir-header').appendChild(dirSearch);
+
+dirSearch.addEventListener('input', () => {
+  const q = dirSearch.value.toLowerCase();
+  dirList.querySelectorAll('.dir-entry').forEach(el => {
+    const title = el.querySelector('.dir-title')?.textContent.toLowerCase() || '';
+    el.style.display = title.includes(q) ? '' : 'none';
+  });
+});
+
 async function loadDirectory() {
   dirList.innerHTML = '<div class="dir-loading">loading...</div>';
   try {
     const pastes = await listPublic();
     if (!pastes.length) {
       dirList.innerHTML = '<div class="dir-empty">no public pastes</div>';
+      document.querySelector('.dir-label').textContent = 'public pastes (0)';
       return;
     }
     dirList.innerHTML = pastes.map(p => `
       <a href="/#${esc(p.id)}:${esc(p.key)}" target="_blank" rel="noopener" class="dir-entry">
         <span class="dir-title">${esc(p.title)}</span>
-        <span class="dir-date">${fmtDate(p.created)}</span>
+        <span class="dir-date" title="${fmtDate(p.created)}">${fmtRelative(p.created)}</span>
       </a>
     `).join('');
+    document.querySelector('.dir-label').textContent = 'public pastes (' + pastes.length + ')';
   } catch (e) {
     dirList.innerHTML = `<div class="dir-empty">${esc(e.message)}</div>`;
   }
 }
 
 dirRefresh.addEventListener('click', loadDirectory);
+loadDirectory();

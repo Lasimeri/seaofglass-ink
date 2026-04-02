@@ -7,7 +7,7 @@
   --surface: #12121a;
   --border: #1e1e2e;
   --text: #c4945a;
-  --text-dim: #8a6a3e;
+  --text-dim: #a07a48;
   --accent: #c4945a;
   --accent-dim: #7a5c38;
   --success: #4ade80;
@@ -66,7 +66,7 @@ select, .toolbar input[type="text"] {
   font-family: var(--mono); font-size: 0.7rem;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); padding: 0.4rem 0.6rem;
-  outline: none; cursor: pointer;
+  cursor: pointer;
 }
 select:focus { border-color: var(--accent); }
 select option { background: var(--surface); color: var(--text); }
@@ -80,7 +80,7 @@ select option { background: var(--surface); color: var(--text); }
   font-family: var(--mono); font-size: 0.7rem;
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); padding: 0.4rem 0.6rem;
-  width: 100%; max-width: 300px; outline: none;
+  width: 100%; max-width: 300px;
 }
 .password-row input:focus { border-color: var(--accent); }
 
@@ -92,7 +92,7 @@ select option { background: var(--surface); color: var(--text); }
 textarea {
   width: 100%; min-height: 250px; background: var(--bg); color: var(--text);
   border: none; padding: 1rem; font-family: var(--mono); font-size: 0.8rem;
-  resize: vertical; outline: none; line-height: 1.5;
+  resize: vertical; line-height: 1.5;
 }
 textarea::placeholder { color: var(--accent-dim); }
 .editor-footer {
@@ -127,6 +127,12 @@ button:disabled { opacity: 0.3; cursor: not-allowed; }
 button.danger-btn { color: var(--error); }
 button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
 
+/* Focus visible */
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ============================================================
    Share section
    ============================================================ */
@@ -137,7 +143,7 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 .share-row input {
   flex: 1; font-family: var(--mono); font-size: 0.65rem;
   background: var(--surface); color: var(--text);
-  border: 1px solid var(--border); padding: 0.5rem; outline: none;
+  border: 1px solid var(--border); padding: 0.5rem;
 }
 .share-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
 
@@ -165,7 +171,7 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 .decrypt-row input {
   flex: 1; font-family: var(--mono); font-size: 0.7rem;
   background: var(--surface); color: var(--text);
-  border: 1px solid var(--border); padding: 0.5rem; outline: none;
+  border: 1px solid var(--border); padding: 0.5rem;
 }
 .decrypt-row input:focus { border-color: var(--accent); }
 .error-text { font-size: 0.7rem; color: var(--error); margin-top: 0.5rem; }
@@ -229,4 +235,33 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
   .size-limit { margin-left: 0; }
   .dir-entry { flex-direction: column; gap: 0.25rem; }
   .dir-date { margin-left: 0; }
+  button { padding: 0.7rem 1.2rem; font-size: 0.75rem; }
+  select { padding: 0.6rem 0.8rem; }
 }
+
+/* ============================================================
+   How it works
+   ============================================================ */
+
+.how-it-works { margin-top: 1.5rem; }
+.how-it-works summary {
+  font-size: 0.65rem; color: var(--text-dim); cursor: pointer;
+  letter-spacing: 0.1em;
+}
+.how-it-works summary:hover { color: var(--accent); }
+.how-content { padding: 0.75rem 0; }
+.how-content p {
+  font-size: 0.65rem; color: var(--text-dim);
+  margin-bottom: 0.4rem; line-height: 1.5;
+}
+.how-content strong { color: var(--text); }
+
+/* ============================================================
+   Create another link
+   ============================================================ */
+
+.create-link {
+  font-family: var(--mono); font-size: 0.7rem;
+  color: var(--text-dim); text-decoration: none;
+}
+.create-link:hover { color: var(--accent); }

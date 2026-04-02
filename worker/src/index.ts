@@ -132,9 +132,9 @@ function isLegacyHash(h: string): boolean {
 
 /**
  * Build TXT record JSON envelope.
- * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=encryptedDeleteHash, e=expiresAt
+ * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=encryptedDeleteHash, e=expiresAt, p=encryptedPgpKey
  */
-function buildRecord(data: string, title: string | null, mode: string, encryptedH: string | null, publicKey?: string, expiry?: number): string {
+function buildRecord(data: string, title: string | null, mode: string, encryptedH: string | null, publicKey?: string, expiry?: number, pgpKey?: string): string {
 	const now = Math.floor(Date.now() / 3600000) * 3600;
 	const rec: Record<string, unknown> = {
 		d: data,
@@ -145,6 +145,7 @@ function buildRecord(data: string, title: string | null, mode: string, encrypted
 	if (title) rec.t = title;
 	if (publicKey) rec.k = publicKey;
 	if (expiry && expiry > 0) rec.e = now + expiry;
+	if (pgpKey) rec.p = pgpKey;
 	return JSON.stringify(rec);
 }
 
@@ -243,7 +244,7 @@ export default {
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
-			const { data, title, mode, key: publicKey, h: encryptedH, expiry } = body;
+			const { data, title, mode, key: publicKey, h: encryptedH, expiry, p: pgpKey } = body;
 			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
 			if (!['link', 'password', 'public', 'burn'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
@@ -251,7 +252,7 @@ export default {
 			const id = crypto.randomUUID().slice(0, 12);
 			const expirySeconds = typeof expiry === 'number' && expiry > 0 ? expiry : undefined;
 
-			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined, expirySeconds);
+			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined, expirySeconds, pgpKey || undefined);
 			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
 
 			const ok = await dnsCreate(env, id, record);

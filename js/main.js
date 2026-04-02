@@ -6,7 +6,7 @@ import {
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=10';
 import { renderQR } from './qr.js?v=10';
 import { downloadPDF } from './pdf.js?v=10';
-import { fuzzySearch, markdownToHtml } from './wasm.js?v=10';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpFingerprint } from './wasm.js?v=10';
 import { highlight, detectLanguage } from './highlight.js?v=10';
 
 const $ = s => document.querySelector(s);
@@ -128,6 +128,33 @@ function renderNumberedText(pre, text) {
       });
     }).catch(() => {}); // WASM unavailable — keep plain text
   }
+}
+
+async function showHashes(prefix, text, record, decryptFn) {
+  const pasteHashEl = $(`#${prefix}-paste-hash`);
+  const pubkeyHashEl = $(`#${prefix}-pubkey-hash`);
+  const hashBar = $(`#${prefix}-hashes`);
+  if (!pasteHashEl || !hashBar) return;
+
+  const pasteHash = await sha256hex(text);
+  pasteHashEl.textContent = pasteHash;
+  pasteHashEl.title = pasteHash;
+  pasteHashEl.addEventListener('click', () => { navigator.clipboard.writeText(pasteHash); });
+
+  if (record.p && decryptFn) {
+    try {
+      const pubKey = await decryptFn(record.p);
+      const pubKeyHash = await sha256hex(pubKey);
+      pubkeyHashEl.textContent = pubKeyHash;
+      pubkeyHashEl.title = pubKeyHash;
+      pubkeyHashEl.addEventListener('click', () => { navigator.clipboard.writeText(pubKeyHash); });
+    } catch {
+      pubkeyHashEl.textContent = 'n/a';
+    }
+  } else {
+    pubkeyHashEl.textContent = 'n/a';
+  }
+  hashBar.classList.remove('hidden');
 }
 
 function downloadText(text, filename) {
@@ -347,11 +374,38 @@ if (route.mode === 'create') {
     log('encrypting...');
 
     try {
-      let data, keyStr = null, key = null;
+      let data, keyStr = null, key = null, encryptedPubKey = null;
 
       if (mode === 'password') {
-        data = await encryptWithPassword(text, passwordInput.value);
+        // Generate PGP keypair, encrypt content with PGP, then encrypt with password
+        try {
+          log('generating pgp keypair...');
+          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', passwordInput.value);
+          const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
+          const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
+          data = await encryptWithPassword(pgpText, passwordInput.value);
+          encryptedPubKey = await encryptWithPassword(pgpKeys.public, passwordInput.value);
+        } catch {
+          // PGP WASM not loaded — fall back to direct encryption
+          data = await encryptWithPassword(text, passwordInput.value);
+        }
+      } else if (mode !== 'public') {
+        // link / burn modes — generate PGP keypair, encrypt content with PGP, then with AES key
+        key = await generateKey();
+        keyStr = await exportKey(key);
+        try {
+          log('generating pgp keypair...');
+          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', crypto.randomUUID());
+          const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
+          const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
+          data = await encrypt(pgpText, key);
+          encryptedPubKey = await encrypt(pgpKeys.public, key);
+        } catch {
+          // PGP WASM not loaded — fall back to direct encryption
+          data = await encrypt(text, key);
+        }
       } else {
+        // Public mode — no PGP layer, unchanged
         key = await generateKey();
         data = await encrypt(text, key);
         keyStr = await exportKey(key);
@@ -378,7 +432,7 @@ if (route.mode === 'create') {
       }
 
       const expiry = parseInt($('#expiry-select').value) || 0;
-      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry);
+      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry, encryptedPubKey);
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
@@ -502,6 +556,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         adminContent.classList.remove('hidden');
         setupScrollIndicator(adminText.closest('.read-frame'));
         setupWrapToggle($('#admin-wrap'), adminText);
+        showHashes('admin', text, record, (p) => decrypt(p, key));
         log('');
       } catch (e) {
         log(e.message, true);
@@ -539,6 +594,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           adminContent.classList.remove('hidden');
           setupScrollIndicator(adminText.closest('.read-frame'));
           setupWrapToggle($('#admin-wrap'), adminText);
+          showHashes('admin', text, record, (p) => decryptWithPassword(p, pw));
           log('');
         } catch {
           adminPromptError.textContent = '\u2715 wrong password';
@@ -657,6 +713,7 @@ if (route.mode === 'read') {
     renderNumberedText(decryptedText, text);
     setupScrollIndicator(decryptedText.closest('.read-frame'));
     setupWrapToggle($('#read-wrap'), decryptedText);
+    showHashes('read', text, record, (p) => decrypt(p, key));
 
     // Show search for pastes with 10+ lines
     if (text.split('\n').length >= 10) {
@@ -790,6 +847,7 @@ if (route.mode === 'password') {
         if (record.c) readDate.textContent = fmtDate(record.c);
         renderNumberedText(decryptedText, text);
         setupScrollIndicator(decryptedText.closest('.read-frame'));
+        showHashes('read', text, record, (p) => decryptWithPassword(p, pw));
         log('decrypted');
       } catch {
         promptError.textContent = '\u2715 wrong password';

@@ -6,12 +6,13 @@ const DOMAIN = 'seaofglass.ink';
 
 // --- Write operations ---
 
-export async function store(data, title, mode, publicKey, encryptedH, expiry) {
+export async function store(data, title, mode, publicKey, encryptedH, expiry, encryptedPgpKey) {
   const body = { data, mode };
   if (title) body.title = title;
   if (publicKey) body.key = publicKey;
   if (encryptedH) body.h = encryptedH;
   if (expiry) body.expiry = expiry;
+  if (encryptedPgpKey) body.p = encryptedPgpKey;
   const res = await fetch(`${WORKER_URL}/store`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

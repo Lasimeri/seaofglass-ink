@@ -1,12 +1,16 @@
 // AES-256-GCM encrypt/decrypt
-// Pipeline: plaintext -> compress (zstd) -> pad -> encrypt -> base64url
+// Pipeline: plaintext -> compress (brotli) -> pad -> encrypt -> base64url
 // Compression UNDER encryption so ciphertext is smaller
-// Backward compat: decompress auto-detects zstd vs deflate via magic bytes
+// Backward compat: decompress auto-detects brotli (BR prefix) vs zstd (magic) vs deflate
 
-import { zstdCompress, zstdDecompress, argon2idDerive } from './wasm.js?v=10';
+import { brotliCompress, brotliDecompress, zstdDecompress, argon2idDerive } from './wasm.js?v=10';
 
-const ZSTD_MAGIC = [0x28, 0xB5, 0x2F, 0xFD];
+const BROTLI_MAGIC = [0x42, 0x52]; // "BR" prefix for brotli-compressed data
 const ARGON2_MAGIC = [0x49, 0x4E, 0x4B, 0x31]; // "INK1"
+
+function isBrotli(data) {
+  return data.length >= 2 && data[0] === 0x42 && data[1] === 0x52;
+}
 
 function isZstd(data) {
   return data.length >= 4 && data[0] === 0x28 && data[1] === 0xB5 && data[2] === 0x2F && data[3] === 0xFD;
@@ -156,7 +160,12 @@ function unpad(buf) {
 // New pastes use zstd; old pastes used deflate. Auto-detect on decompress.
 async function compress(data) {
   try {
-    return await zstdCompress(data, 3);
+    // Brotli quality 11 (max compression). Prepend "BR" magic for detection.
+    const compressed = await brotliCompress(data, 11);
+    const out = new Uint8Array(2 + compressed.length);
+    out[0] = 0x42; out[1] = 0x52; // "BR"
+    out.set(compressed, 2);
+    return out;
   } catch {
     // WASM not available — fall back to deflate
     return deflateCompress(data);
@@ -164,9 +173,15 @@ async function compress(data) {
 }
 
 async function decompress(data) {
+  if (isBrotli(data)) {
+    // Strip "BR" prefix, decompress brotli
+    return brotliDecompress(data.slice(2));
+  }
   if (isZstd(data)) {
+    // Legacy zstd-compressed pastes
     return zstdDecompress(data);
   }
+  // Legacy deflate-compressed pastes
   return deflateDecompress(data);
 }
 

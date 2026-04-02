@@ -94,7 +94,7 @@ async function loadGrammar(lang) {
   const compressed = new Uint8Array(await resp.arrayBuffer());
   const wasmBytes = await brotliDecompress(compressed);
 
-  const language = await Parser.Language.load(wasmBytes.buffer);
+  const language = await Parser.Language.load(wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength));
   const parser = new Parser();
   parser.setLanguage(language);
   parsers.set(lang, { parser, language });

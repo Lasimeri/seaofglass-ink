@@ -20,7 +20,7 @@ async function initCore() {
   if (corePromise) return corePromise;
   corePromise = (async () => {
     const mod = await import('./ink_wasm.js');
-    await mod.default('./ink_wasm_bg.wasm');
+    await mod.default();
     coreModule = mod;
     return mod;
   })();
@@ -40,8 +40,9 @@ async function initBrotli() {
     // Decompress with core's zstd
     const wasmBytes = core.zstd_decompress(compressed);
     // Instantiate brotli module from decompressed bytes
+    // Use slice() to get a clean ArrayBuffer (zstd may return a view into a larger buffer)
     const mod = await import('./ink_brotli.js');
-    await mod.default(wasmBytes.buffer);
+    await mod.default(wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength));
     brotliModule = mod;
     return mod;
   })();
@@ -84,7 +85,7 @@ async function initPgp() {
     const compressed = new Uint8Array(await resp.arrayBuffer());
     const wasmBytes = brotli.brotli_decompress(compressed);
     const mod = await import('./ink_pgp.js');
-    await mod.default(wasmBytes.buffer);
+    await mod.default(wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength));
     pgpModule = mod;
     return mod;
   })();

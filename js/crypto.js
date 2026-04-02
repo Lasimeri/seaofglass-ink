@@ -3,7 +3,7 @@
 // Compression UNDER encryption so ciphertext is smaller
 // Backward compat: decompress auto-detects brotli (BR prefix) vs zstd (magic) vs deflate
 
-import { brotliCompress, brotliDecompress, zstdDecompress, argon2idDerive } from './wasm.js?v=10';
+import { brotliCompress, brotliDecompress, zstdDecompress, argon2idDerive } from './wasm.js?v=12';
 
 const BROTLI_MAGIC = [0x42, 0x52]; // "BR" prefix for brotli-compressed data
 const ARGON2_MAGIC = [0x49, 0x4E, 0x4B, 0x31]; // "INK1"

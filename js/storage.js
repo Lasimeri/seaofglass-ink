@@ -1,7 +1,7 @@
 // DNS-backed paste storage via Cloudflare Worker + DoH
 // v2: Multi-record chunked storage with Merkle root verification
 
-import { splitIntoChunks, reassembleChunks, computeMerkleRoot, verifyMerkleRoot } from './crypto.js?v=11';
+import { splitIntoChunks, reassembleChunks, computeMerkleRoot, verifyMerkleRoot } from './crypto.js?v=12';
 
 export const WORKER_URL = 'https://sea-ink.seaofglass.workers.dev';
 const DOH_URL = 'https://cloudflare-dns.com/dns-query';

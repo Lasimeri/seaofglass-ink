@@ -1,7 +1,7 @@
 // highlight.js — Tree-sitter syntax highlighting with brotli-compressed grammars
 // Loads tree-sitter runtime uncompressed, decompresses grammar WASMs on demand via ink-brotli.
 
-import { brotliDecompress } from './wasm.js?v=10';
+import { brotliDecompress } from './wasm.js?v=12';
 
 const SYNTAX_BASE = new URL('./syntax/', import.meta.url).href;
 

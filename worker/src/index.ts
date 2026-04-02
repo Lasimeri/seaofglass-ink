@@ -114,17 +114,19 @@ function isLegacyHash(h: string): boolean {
 
 /**
  * Build TXT record JSON envelope.
- * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=encryptedDeleteHash
+ * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=encryptedDeleteHash, e=expiresAt
  */
-function buildRecord(data: string, title: string | null, mode: string, encryptedH: string | null, publicKey?: string): string {
+function buildRecord(data: string, title: string | null, mode: string, encryptedH: string | null, publicKey?: string, expiry?: number): string {
+	const now = Math.floor(Date.now() / 3600000) * 3600;
 	const rec: Record<string, unknown> = {
 		d: data,
 		m: mode,
-		c: Math.floor(Date.now() / 3600000) * 3600,
+		c: now,
 	};
 	if (encryptedH) rec.h = encryptedH;
 	if (title) rec.t = title;
 	if (publicKey) rec.k = publicKey;
+	if (expiry && expiry > 0) rec.e = now + expiry;
 	return JSON.stringify(rec);
 }
 
@@ -223,15 +225,15 @@ export default {
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
-			const { data, title, mode, key: publicKey, h: encryptedH } = body;
+			const { data, title, mode, key: publicKey, h: encryptedH, expiry } = body;
 			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
-			if (!['link', 'password', 'public'].includes(mode)) return err('invalid mode');
+			if (!['link', 'password', 'public', 'burn'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
 			const id = crypto.randomUUID().slice(0, 12);
+			const expirySeconds = typeof expiry === 'number' && expiry > 0 ? expiry : undefined;
 
-			// Delete hash is client-encrypted — server stores it opaque
-			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined);
+			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined, expirySeconds);
 			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
 
 			const ok = await dnsCreate(env, id, record);
@@ -336,7 +338,22 @@ export default {
 			let parsed: any;
 			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
 
+			// Check expiry
+			if (parsed.e) {
+				const now = Math.floor(Date.now() / 1000);
+				if (now > parsed.e) {
+					for (const rec of records) await dnsDelete(env, rec.id);
+					return err('paste expired', 410);
+				}
+			}
+
 			delete parsed.h;
+
+			// Burn after read — return data then delete (skip for admin reads via ?admin=1)
+			if (parsed.m === 'burn' && !url.searchParams.has('admin')) {
+				for (const rec of records) await dnsDelete(env, rec.id);
+			}
+
 			return json(parsed);
 		}
 
@@ -347,7 +364,8 @@ export default {
 			for (const rec of records) {
 				try {
 					const parsed = JSON.parse(rec.content);
-					if (parsed.m === 'public') {
+					if (parsed.e && Math.floor(Date.now() / 1000) > parsed.e) continue; // expired
+				if (parsed.m === 'public') {
 						const id = rec.name.split('.')[0];
 						publicPastes.push({
 							id,

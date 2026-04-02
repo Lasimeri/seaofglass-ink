@@ -6,11 +6,12 @@ const DOMAIN = 'seaofglass.ink';
 
 // --- Write operations ---
 
-export async function store(data, title, mode, publicKey, encryptedH) {
+export async function store(data, title, mode, publicKey, encryptedH, expiry) {
   const body = { data, mode };
   if (title) body.title = title;
   if (publicKey) body.key = publicKey;
   if (encryptedH) body.h = encryptedH;
+  if (expiry) body.expiry = expiry;
   const res = await fetch(`${WORKER_URL}/store`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,8 +42,8 @@ export async function remove(id, deleteToken, key, password) {
 // --- Read operations ---
 
 // Direct read via worker CF API (no propagation delay — used for admin tab)
-export async function loadDirect(id) {
-  const res = await fetch(`${WORKER_URL}/read/${id}`);
+export async function loadDirect(id, admin = false) {
+  const res = await fetch(`${WORKER_URL}/read/${id}${admin ? '?admin=1' : ''}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `read failed: ${res.status}`);

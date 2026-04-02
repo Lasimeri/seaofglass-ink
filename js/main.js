@@ -2,9 +2,9 @@ import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=9';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=9';
-import { renderQR } from './qr.js?v=9';
+} from './crypto.js?v=10';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=10';
+import { renderQR } from './qr.js?v=10';
 
 const $ = s => document.querySelector(s);
 
@@ -344,7 +344,7 @@ if (route.mode === 'create') {
       let title = titleInput.value.trim() || null;
       if (title && mode === 'password') {
         title = await encryptWithPassword(title, passwordInput.value);
-      } else if (title && mode === 'link' && key) {
+      } else if (title && (mode === 'link' || mode === 'burn') && key) {
         title = await encrypt(title, key);
       }
 
@@ -360,7 +360,8 @@ if (route.mode === 'create') {
         encryptedH = deleteHash; // public mode: plaintext hash
       }
 
-      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH);
+      const expiry = parseInt($('#expiry-select').value) || 0;
+      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry);
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
@@ -437,7 +438,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
 
   log('fetching paste...');
 
-  loadDirect(route.id).then(async record => {
+  loadDirect(route.id, true).then(async record => {
     if (record.c) adminDate.textContent = fmtDate(record.c);
 
     // Delete TTL countdown
@@ -621,6 +622,7 @@ if (route.mode === 'read') {
   log('fetching from dns...');
 
   load(route.id).then(async record => {
+    if (record.e && Math.floor(Date.now() / 1000) > record.e) throw new Error('paste expired');
     if (record.c) readDate.textContent = fmtDate(record.c);
     log('decrypting...');
     const key = await importKey(route.key);
@@ -632,7 +634,8 @@ if (route.mode === 'read') {
     renderNumberedText(decryptedText, text);
     setupScrollIndicator(decryptedText.closest('.read-frame'));
     setupWrapToggle($('#read-wrap'), decryptedText);
-    log('decrypted');
+    if (record.m === 'burn') log('this paste has been burned');
+    else log('decrypted');
   }).catch(e => {
     if (/not found/i.test(e.message)) showNotFound(e.message);
     else log(e.message, true);
@@ -679,6 +682,7 @@ if (route.mode === 'password') {
   log('fetching from dns...');
 
   load(route.id).then(record => {
+    if (record.e && Math.floor(Date.now() / 1000) > record.e) throw new Error('paste expired');
     if (record.c) promptDate.textContent = fmtDate(record.c);
     log('enter password to decrypt');
 

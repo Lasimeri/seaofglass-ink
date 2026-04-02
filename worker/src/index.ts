@@ -244,7 +244,7 @@ export default {
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
-			const { chunks, merkleRoot, data, title, mode, key: publicKey, h: encryptedH, expiry, p: pgpKey } = body;
+			const { chunks, merkleRoot, data, title, mode, key: publicKey, h: encryptedH, expiry } = body;
 			if (!['link', 'password', 'public', 'burn', 'deniable'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
@@ -265,7 +265,6 @@ export default {
 						if (title) rec.t = title;
 						if (publicKey && mode === 'public') rec.k = publicKey;
 						if (expirySeconds) rec.e = now + expirySeconds;
-						if (pgpKey) rec.p = pgpKey;
 					}
 					const content = JSON.stringify(rec);
 					if (content.length > MAX_RECORD_LEN) return err(`chunk ${i} too large (${content.length})`, 413);

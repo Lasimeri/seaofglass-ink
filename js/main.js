@@ -131,7 +131,16 @@ function renderNumberedText(pre, text) {
   }
 }
 
-async function showHashes(prefix, text, record, decryptFn) {
+const INK_PUBKEY_MARKER = '\n---INK-PUBKEY---\n';
+
+// Extract content and pubkey from decrypted text (pubkey may be embedded)
+function extractPubKey(text) {
+  const idx = text.indexOf(INK_PUBKEY_MARKER);
+  if (idx === -1) return { content: text, pubkey: null };
+  return { content: text.slice(0, idx), pubkey: text.slice(idx + INK_PUBKEY_MARKER.length) };
+}
+
+async function showHashes(prefix, text, pubkey) {
   const pasteHashEl = $(`#${prefix}-paste-hash`);
   const pubkeyHashEl = $(`#${prefix}-pubkey-hash`);
   const hashBar = $(`#${prefix}-hashes`);
@@ -142,16 +151,11 @@ async function showHashes(prefix, text, record, decryptFn) {
   pasteHashEl.title = pasteHash;
   pasteHashEl.addEventListener('click', () => { navigator.clipboard.writeText(pasteHash); });
 
-  if (record.p && decryptFn) {
-    try {
-      const pubKey = await decryptFn(record.p);
-      const pubKeyHash = await sha256hex(pubKey);
-      pubkeyHashEl.textContent = pubKeyHash;
-      pubkeyHashEl.title = pubKeyHash;
-      pubkeyHashEl.addEventListener('click', () => { navigator.clipboard.writeText(pubKeyHash); });
-    } catch {
-      pubkeyHashEl.textContent = 'n/a';
-    }
+  if (pubkey) {
+    const pubKeyHash = await sha256hex(pubkey);
+    pubkeyHashEl.textContent = pubKeyHash;
+    pubkeyHashEl.title = pubKeyHash;
+    pubkeyHashEl.addEventListener('click', () => { navigator.clipboard.writeText(pubKeyHash); });
   } else {
     pubkeyHashEl.textContent = 'n/a';
   }
@@ -412,8 +416,9 @@ if (route.mode === 'create') {
           const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
           hidePgpProgress();
           const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
-          data = await encryptWithPassword(pgpText, passwordInput.value);
-          encryptedPubKey = await encryptWithPassword(pgpKeys.public, passwordInput.value);
+          // Embed public key in the encrypted blob (avoids separate oversized 'p' field)
+          const combined = pgpText + '\n---INK-PUBKEY---\n' + pgpKeys.public;
+          data = await encryptWithPassword(combined, passwordInput.value);
         } catch {
           hidePgpProgress();
           // PGP WASM not loaded — fall back to direct encryption
@@ -466,8 +471,8 @@ if (route.mode === 'create') {
           const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
           hidePgpProgress();
           const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
-          data = await encrypt(pgpText, key);
-          encryptedPubKey = await encrypt(pgpKeys.public, key);
+          const combined = pgpText + '\n---INK-PUBKEY---\n' + pgpKeys.public;
+          data = await encrypt(combined, key);
         } catch {
           hidePgpProgress();
           // PGP WASM not loaded — fall back to direct encryption
@@ -503,7 +508,7 @@ if (route.mode === 'create') {
       }
 
       const expiry = parseInt($('#expiry-select').value) || 0;
-      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry, encryptedPubKey);
+      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry);
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
@@ -622,12 +627,13 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           try { adminTitle.textContent = await decrypt(record.t, key); }
           catch { adminTitle.textContent = record.t; }
         }
-        const text = await decrypt(record.d, key);
+        const rawText = await decrypt(record.d, key);
+        const { content: text, pubkey } = extractPubKey(rawText);
         renderNumberedText(adminText, text);
         adminContent.classList.remove('hidden');
         setupScrollIndicator(adminText.closest('.read-frame'));
         setupWrapToggle($('#admin-wrap'), adminText);
-        showHashes('admin', text, record, (p) => decrypt(p, key));
+        showHashes('admin', text, pubkey);
         log('');
       } catch (e) {
         log(e.message, true);
@@ -657,17 +663,18 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           const text = record.m === 'deniable'
             ? await decryptDeniable(record.d, pw)
             : await decryptWithPassword(record.d, pw);
+          const { content: adminDecText, pubkey: adminPubkey } = extractPubKey(text);
           if (record.t) {
             try { adminTitle.textContent = await decryptWithPassword(record.t, pw); }
             catch { adminTitle.textContent = record.t; }
           }
           adminPassword = pw; // retain for delete/revoke
           adminPasswordPrompt.classList.add('hidden');
-          renderNumberedText(adminText, text);
+          renderNumberedText(adminText, adminDecText);
           adminContent.classList.remove('hidden');
           setupScrollIndicator(adminText.closest('.read-frame'));
           setupWrapToggle($('#admin-wrap'), adminText);
-          showHashes('admin', text, record, (p) => decryptWithPassword(p, pw));
+          showHashes('admin', adminDecText, adminPubkey);
           log('');
         } catch {
           adminPromptError.textContent = '\u2715 wrong password';
@@ -782,11 +789,12 @@ if (route.mode === 'read') {
       try { readTitle.textContent = await decrypt(record.t, key); }
       catch { readTitle.textContent = record.t; }
     }
-    const text = await decrypt(record.d, key);
+    const rawText = await decrypt(record.d, key);
+    const { content: text, pubkey } = extractPubKey(rawText);
     renderNumberedText(decryptedText, text);
     setupScrollIndicator(decryptedText.closest('.read-frame'));
     setupWrapToggle($('#read-wrap'), decryptedText);
-    showHashes('read', text, record, (p) => decrypt(p, key));
+    showHashes('read', text, pubkey);
 
     // Show search for pastes with 10+ lines
     if (text.split('\n').length >= 10) {
@@ -916,13 +924,14 @@ if (route.mode === 'password') {
           try { decTitle = await decryptWithPassword(record.t, pw); }
           catch { decTitle = record.t; }
         }
+        const { content: pwReadText, pubkey: pwPubkey } = extractPubKey(text);
         passwordPrompt.classList.add('hidden');
         readSection.classList.remove('hidden');
         if (decTitle) readTitle.textContent = decTitle;
         if (record.c) readDate.textContent = fmtDate(record.c);
-        renderNumberedText(decryptedText, text);
+        renderNumberedText(decryptedText, pwReadText);
         setupScrollIndicator(decryptedText.closest('.read-frame'));
-        showHashes('read', text, record, (p) => decryptWithPassword(p, pw));
+        showHashes('read', pwReadText, pwPubkey);
         log('decrypted');
       } catch {
         promptError.textContent = '\u2715 wrong password';

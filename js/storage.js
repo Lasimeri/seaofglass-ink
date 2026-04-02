@@ -9,7 +9,7 @@ const DOMAIN = 'seaofglass.ink';
 
 // --- Write operations ---
 
-export async function store(data, title, mode, publicKey, encryptedH, expiry, encryptedPgpKey) {
+export async function store(data, title, mode, publicKey, encryptedH, expiry) {
   const chunks = splitIntoChunks(data);
   const merkleRoot = await computeMerkleRoot(chunks);
 
@@ -22,7 +22,6 @@ export async function store(data, title, mode, publicKey, encryptedH, expiry, en
   if (publicKey) body.key = publicKey;
   if (encryptedH) body.h = encryptedH;
   if (expiry) body.expiry = expiry;
-  if (encryptedPgpKey) body.p = encryptedPgpKey;
 
   const res = await fetch(`${WORKER_URL}/store`, {
     method: 'POST',

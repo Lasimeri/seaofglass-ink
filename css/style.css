@@ -174,12 +174,16 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
   min-height: 120px; max-height: 500px; overflow-y: auto;
   color: var(--text); line-height: 1.5;
 }
+.read-frame pre.nowrap { white-space: pre; word-break: normal; overflow-x: auto; }
 .read-frame pre .line { display: block; }
 .read-frame pre .ln {
   display: inline-block; width: 3ch; text-align: right;
   margin-right: 1.5ch; color: var(--text-dim); opacity: 0.4;
-  user-select: none; -webkit-user-select: none;
+  user-select: none; -webkit-user-select: none; cursor: pointer;
 }
+.read-frame pre .line.highlighted { background: var(--surface); }
+.paste-link { color: var(--accent); text-decoration: none; }
+.paste-link:hover { text-decoration: underline; }
 .read-frame.has-overflow::after {
   content: '';
   position: absolute; bottom: 0; left: 0; right: 0;
@@ -231,12 +235,23 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 }
 .dir-entry:last-child { border-bottom: none; }
 .dir-entry:hover { background: var(--surface); }
-.dir-title { font-size: 0.75rem; color: var(--text); }
+.dir-title {
+  font-size: 0.75rem; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 70%; min-width: 0;
+}
 .dir-date { font-size: 0.6rem; color: var(--text-dim); flex-shrink: 0; margin-left: 1rem; }
-.dir-empty, .dir-loading {
+.dir-empty {
   padding: 1rem; font-size: 0.7rem; color: var(--text-dim); text-align: center;
 }
-.dir-loading { animation: pulse 1.5s ease-in-out infinite; }
+.dir-skeleton { padding: 0.6rem 0.8rem; }
+.dir-skeleton .skel-bar {
+  height: 0.7rem; background: var(--surface); border-radius: 2px;
+  margin-bottom: 0.6rem; animation: pulse 1.5s ease-in-out infinite;
+}
+.dir-skeleton .skel-bar:nth-child(1) { width: 65%; }
+.dir-skeleton .skel-bar:nth-child(2) { width: 45%; animation-delay: 0.2s; }
+.dir-skeleton .skel-bar:nth-child(3) { width: 55%; animation-delay: 0.4s; }
 
 /* ============================================================
    Animations
@@ -249,6 +264,13 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
    ============================================================ */
 
 .hidden { display: none !important; }
+
+/* Deploy version */
+.deploy-version {
+  position: fixed; bottom: 0.5rem; right: 0.75rem;
+  font-family: var(--mono); font-size: 0.55rem; color: var(--text-dim); opacity: 0.3;
+  pointer-events: none;
+}
 
 /* Not found */
 .not-found { text-align: center; padding: 3rem 0; }
@@ -299,3 +321,48 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
   color: var(--text-dim); text-decoration: none;
 }
 .create-link:hover { color: var(--accent); }
+
+/* ============================================================
+   Paste history
+   ============================================================ */
+
+.history-box { margin-top: 1rem; }
+.history-label { font-size: 0.65rem; color: var(--text-dim); opacity: 0.8; cursor: pointer; letter-spacing: 0.1em; }
+.history-label:hover { opacity: 1; color: var(--accent); }
+.history-list { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); margin-top: 0.5rem; }
+.history-entry {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0.4rem 0.8rem; text-decoration: none;
+  border-bottom: 1px solid var(--border); transition: background 0.15s;
+}
+.history-entry:last-child { border-bottom: none; }
+.history-entry:hover { background: var(--surface); }
+.history-title { font-size: 0.7rem; color: var(--text); }
+.history-meta { font-size: 0.6rem; color: var(--text-dim); flex-shrink: 0; margin-left: 1rem; }
+
+/* ============================================================
+   Drag-and-drop
+   ============================================================ */
+
+textarea.dragover { border-color: var(--accent); background: var(--surface); }
+
+/* ============================================================
+   Shortcuts overlay
+   ============================================================ */
+
+.shortcuts-overlay {
+  position: fixed; inset: 0; background: rgba(10, 10, 15, 0.85);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.shortcuts-box {
+  border: 1px solid var(--border); background: var(--surface);
+  padding: 1.5rem 2rem; max-width: 400px; width: 90%;
+}
+.shortcuts-title { font-size: 0.8rem; color: var(--accent); margin-bottom: 1rem; letter-spacing: 0.05em; }
+.shortcut { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+.shortcut kbd {
+  font-family: var(--mono); font-size: 0.65rem; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border);
+  padding: 0.15rem 0.4rem; margin-right: 0.5rem;
+}
+.shortcuts-dismiss { font-size: 0.6rem; color: var(--text-dim); opacity: 0.5; margin-top: 1rem; }

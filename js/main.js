@@ -2,9 +2,9 @@ import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=4';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=4';
-import { renderQR } from './qr.js?v=1';
+} from './crypto.js?v=9';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=9';
+import { renderQR } from './qr.js?v=9';
 
 const $ = s => document.querySelector(s);
 
@@ -93,12 +93,41 @@ function showNotFound(msg) {
   c.appendChild(el);
 }
 
+function linkify(text) {
+  return text.replace(/(https?:\/\/[^\s<>"')\]]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer" class="paste-link">$1</a>');
+}
+
 function renderNumberedText(pre, text) {
   pre.dataset.raw = text;
   const lines = text.split('\n');
   pre.innerHTML = lines.map((line, i) =>
-    `<span class="line"><span class="ln">${i + 1}</span>${esc(line)}</span>`
+    `<span class="line" data-ln="${i + 1}"><span class="ln">${i + 1}</span>${linkify(esc(line))}</span>`
   ).join('\n');
+  pre.addEventListener('click', (e) => {
+    const ln = e.target.closest('.ln');
+    if (!ln) return;
+    const line = ln.parentElement;
+    pre.querySelectorAll('.line.highlighted').forEach(el => el.classList.remove('highlighted'));
+    line.classList.toggle('highlighted');
+  });
+}
+
+function downloadText(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename || 'paste.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function setupWrapToggle(btn, pre) {
+  if (!btn || !pre) return;
+  btn.addEventListener('click', () => {
+    pre.classList.toggle('nowrap');
+    btn.textContent = pre.classList.contains('nowrap') ? 'wrap' : 'no-wrap';
+  });
 }
 
 function setupScrollIndicator(frame) {
@@ -119,6 +148,30 @@ document.querySelectorAll('input[type="password"]').forEach(input => {
   input.addEventListener('dblclick', () => {
     input.type = input.type === 'password' ? 'text' : 'password';
   });
+});
+
+// Keyboard shortcuts overlay
+document.addEventListener('keydown', (e) => {
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+    e.preventDefault();
+    let overlay = $('#shortcuts-overlay');
+    if (overlay) { overlay.remove(); return; }
+    overlay = document.createElement('div');
+    overlay.id = 'shortcuts-overlay';
+    overlay.className = 'shortcuts-overlay';
+    overlay.innerHTML = `
+      <div class="shortcuts-box">
+        <div class="shortcuts-title">keyboard shortcuts</div>
+        <div class="shortcut"><kbd>Tab</kbd> insert tab in editor</div>
+        <div class="shortcut"><kbd>Ctrl+Enter</kbd> encrypt &amp; save</div>
+        <div class="shortcut"><kbd>dblclick</kbd> toggle password visibility</div>
+        <div class="shortcut"><kbd>?</kbd> this overlay</div>
+        <div class="shortcuts-dismiss">press ? or click to close</div>
+      </div>
+    `;
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  }
 });
 
 // ============================================================
@@ -173,6 +226,23 @@ if (route.mode === 'create') {
     }
   });
 
+  // Drag-and-drop file into editor
+  editor.addEventListener('dragover', (e) => { e.preventDefault(); editor.classList.add('dragover'); });
+  editor.addEventListener('dragleave', () => { editor.classList.remove('dragover'); });
+  editor.addEventListener('drop', (e) => {
+    e.preventDefault();
+    editor.classList.remove('dragover');
+    const file = e.dataTransfer?.files?.[0];
+    if (file && file.size < 50000) { // 50KB limit
+      const reader = new FileReader();
+      reader.onload = () => {
+        editor.value = reader.result;
+        editor.dispatchEvent(new Event('input'));
+      };
+      reader.readAsText(file);
+    }
+  });
+
   // Editor line-number gutter
   const gutter = $('#editor-gutter');
   function updateGutter() {
@@ -208,6 +278,42 @@ if (route.mode === 'create') {
       sizeLimit.className = 'size-limit' + (pct > 95 ? ' danger' : pct > 75 ? ' warn' : '');
     } catch { /* ignore */ }
   }
+
+  // Local paste history
+  const HISTORY_KEY = 'ink-history';
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  }
+  function saveToHistory(entry) {
+    const h = getHistory();
+    h.unshift(entry);
+    if (h.length > 50) h.pop(); // keep last 50
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+  }
+  function renderHistory() {
+    const container = $('#paste-history');
+    if (!container) return;
+    const h = getHistory();
+    if (!h.length) { container.classList.add('hidden'); return; }
+    container.classList.remove('hidden');
+    const list = container.querySelector('.history-list');
+    list.innerHTML = h.map(e => `
+      <a href="${esc(e.url)}" target="_blank" rel="noopener" class="history-entry">
+        <span class="history-title">${esc(e.title || e.id)}</span>
+        <span class="history-meta">${esc(e.mode)} · ${fmtRelative(e.created)}</span>
+      </a>
+    `).join('');
+  }
+  renderHistory();
+
+  // Paste from clipboard button
+  $('#paste-clipboard').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      editor.value = text;
+      editor.dispatchEvent(new Event('input'));
+    } catch { log('clipboard access denied', true); }
+  });
 
   createBtn.addEventListener('click', async () => {
     const text = editor.value.trim();
@@ -263,6 +369,22 @@ if (route.mode === 'create') {
       } else {
         adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${deleteToken}`;
       }
+
+      // Save to local paste history (reader URL, not admin URL)
+      let readerUrl;
+      if (mode === 'password') {
+        readerUrl = `${location.origin}/#p:${result.id}`;
+      } else {
+        readerUrl = `${location.origin}/#${result.id}:${keyStr}`;
+      }
+      saveToHistory({
+        id: result.id,
+        title: titleInput.value.trim() || result.id,
+        mode,
+        created: Math.floor(Date.now() / 1000),
+        url: readerUrl,
+      });
+      renderHistory();
 
       if (adminTab) {
         adminTab.location.href = adminUrl;
@@ -361,6 +483,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         renderNumberedText(adminText, text);
         adminContent.classList.remove('hidden');
         setupScrollIndicator(adminText.closest('.read-frame'));
+        setupWrapToggle($('#admin-wrap'), adminText);
         log('');
       } catch (e) {
         log(e.message, true);
@@ -397,6 +520,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           renderNumberedText(adminText, text);
           adminContent.classList.remove('hidden');
           setupScrollIndicator(adminText.closest('.read-frame'));
+          setupWrapToggle($('#admin-wrap'), adminText);
           log('');
         } catch {
           adminPromptError.textContent = '\u2715 wrong password';
@@ -440,6 +564,10 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   $('#admin-raw').addEventListener('click', () => {
     const raw = adminText.dataset.raw || adminText.textContent;
     window.open('data:text/plain;charset=utf-8,' + encodeURIComponent(raw));
+  });
+
+  $('#admin-download').addEventListener('click', () => {
+    downloadText(adminText.dataset.raw || adminText.textContent);
   });
 
   // Delete
@@ -503,6 +631,7 @@ if (route.mode === 'read') {
     const text = await decrypt(record.d, key);
     renderNumberedText(decryptedText, text);
     setupScrollIndicator(decryptedText.closest('.read-frame'));
+    setupWrapToggle($('#read-wrap'), decryptedText);
     log('decrypted');
   }).catch(e => {
     if (/not found/i.test(e.message)) showNotFound(e.message);
@@ -518,6 +647,10 @@ if (route.mode === 'read') {
   $('#read-raw').addEventListener('click', () => {
     const raw = decryptedText.dataset.raw || decryptedText.textContent;
     window.open('data:text/plain;charset=utf-8,' + encodeURIComponent(raw));
+  });
+
+  $('#read-download').addEventListener('click', () => {
+    downloadText(decryptedText.dataset.raw || decryptedText.textContent);
   });
 }
 
@@ -615,7 +748,7 @@ dirSearch.addEventListener('input', () => {
 });
 
 async function loadDirectory() {
-  dirList.innerHTML = '<div class="dir-loading">loading...</div>';
+  dirList.innerHTML = '<div class="dir-skeleton"><div class="skel-bar"></div><div class="skel-bar"></div><div class="skel-bar"></div></div>';
   try {
     const pastes = await listPublic();
     if (!pastes.length) {

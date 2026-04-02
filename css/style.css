@@ -317,6 +317,18 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 
 /* ============================================================
+   PGP decrypt prompt
+   ============================================================ */
+
+.pgp-decrypt-prompt { margin-top: 0.75rem; }
+.pgp-decrypt-prompt textarea {
+  width: 100%; font-family: var(--mono); font-size: 0.65rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 0.5rem;
+  margin-bottom: 0.5rem; resize: vertical;
+}
+
+/* ============================================================
    PGP keygen progress overlay
    ============================================================ */
 

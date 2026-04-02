@@ -7,7 +7,7 @@ import {
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=12';
 import { renderQR } from './qr.js?v=12';
 import { downloadPDF } from './pdf.js?v=12';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpFingerprint } from './wasm.js?v=12';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=12';
 import { highlight, detectLanguage } from './highlight.js?v=12';
 
 const $ = s => document.querySelector(s);
@@ -418,9 +418,12 @@ if (route.mode === 'create') {
     const mode = modeSelect.value;
     if (mode === 'password' && !passwordInput.value) return log('password required', true);
 
-    // Open blank tab synchronously within the click gesture (before any await)
-    // to prevent popup blockers from killing it
+    // Open tab synchronously (popup blockers require user gesture context)
+    // Show waiting message until paste is stored
     const adminTab = window.open('about:blank', '_blank');
+    if (adminTab) {
+      adminTab.document.write('<html><body style="background:#0a0a0f;color:#c4945a;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><p>encrypting and storing paste...</p><p style="font-size:0.7em;opacity:0.5">this tab will update automatically</p></div></body></html>');
+    }
 
     createBtn.disabled = true;
     log('encrypting...');
@@ -795,10 +798,41 @@ if (route.mode === 'read') {
     }
     const rawText = await decrypt(record.d, key);
     const { content: text, pubkey } = extractPubKey(rawText);
-    renderNumberedText(decryptedText, text);
-    setupScrollIndicator(decryptedText.closest('.read-frame'));
-    setupWrapToggle($('#read-wrap'), decryptedText);
-    showHashes('read', text, pubkey);
+
+    if (pubkey) {
+      // PGP-encrypted content — show PGP decrypt prompt
+      const pgpPrompt = $('#read-pgp-prompt');
+      pgpPrompt.classList.remove('hidden');
+      showHashes('read', text, pubkey);
+      log('paste is pgp-encrypted — provide your private key');
+
+      const doPgpDecrypt = async () => {
+        const privKey = $('#read-pgp-privkey').value.trim();
+        const passphrase = $('#read-pgp-passphrase').value;
+        if (!privKey) return;
+        try {
+          const pgpBinary = Uint8Array.from(atob(text), c => c.charCodeAt(0));
+          const plaintext = await pgpDecrypt(pgpBinary, privKey, passphrase);
+          const decoded = new TextDecoder().decode(plaintext);
+          pgpPrompt.classList.add('hidden');
+          renderNumberedText(decryptedText, decoded);
+          setupScrollIndicator(decryptedText.closest('.read-frame'));
+          setupWrapToggle($('#read-wrap'), decryptedText);
+          showHashes('read', decoded, pubkey);
+          log('decrypted');
+        } catch (e) {
+          $('#read-pgp-error').textContent = '\u2715 ' + e.message;
+          $('#read-pgp-error').classList.remove('hidden');
+        }
+      };
+      $('#read-pgp-decrypt-btn').addEventListener('click', doPgpDecrypt);
+      $('#read-pgp-passphrase').addEventListener('keydown', e => { if (e.key === 'Enter') doPgpDecrypt(); });
+    } else {
+      renderNumberedText(decryptedText, text);
+      setupScrollIndicator(decryptedText.closest('.read-frame'));
+      setupWrapToggle($('#read-wrap'), decryptedText);
+      showHashes('read', text, pubkey);
+    }
 
     // Show search for pastes with 10+ lines
     if (text.split('\n').length >= 10) {
@@ -933,10 +967,39 @@ if (route.mode === 'password') {
         readSection.classList.remove('hidden');
         if (decTitle) readTitle.textContent = decTitle;
         if (record.c) readDate.textContent = fmtDate(record.c);
-        renderNumberedText(decryptedText, pwReadText);
-        setupScrollIndicator(decryptedText.closest('.read-frame'));
-        showHashes('read', pwReadText, pwPubkey);
-        log('decrypted');
+
+        if (pwPubkey) {
+          // PGP-encrypted — show PGP prompt
+          const pgpPrompt = $('#read-pgp-prompt');
+          pgpPrompt.classList.remove('hidden');
+          showHashes('read', pwReadText, pwPubkey);
+          log('paste is pgp-encrypted — provide your private key');
+          const doPgpDecrypt = async () => {
+            const privKey = $('#read-pgp-privkey').value.trim();
+            const passphrase = $('#read-pgp-passphrase').value;
+            if (!privKey) return;
+            try {
+              const pgpBinary = Uint8Array.from(atob(pwReadText), c => c.charCodeAt(0));
+              const plaintext = await pgpDecrypt(pgpBinary, privKey, passphrase);
+              const decoded = new TextDecoder().decode(plaintext);
+              pgpPrompt.classList.add('hidden');
+              renderNumberedText(decryptedText, decoded);
+              setupScrollIndicator(decryptedText.closest('.read-frame'));
+              showHashes('read', decoded, pwPubkey);
+              log('decrypted');
+            } catch (e) {
+              $('#read-pgp-error').textContent = '\u2715 ' + e.message;
+              $('#read-pgp-error').classList.remove('hidden');
+            }
+          };
+          $('#read-pgp-decrypt-btn').onclick = doPgpDecrypt;
+          $('#read-pgp-passphrase').onkeydown = e => { if (e.key === 'Enter') doPgpDecrypt(); };
+        } else {
+          renderNumberedText(decryptedText, pwReadText);
+          setupScrollIndicator(decryptedText.closest('.read-frame'));
+          showHashes('read', pwReadText, pwPubkey);
+          log('decrypted');
+        }
       } catch {
         promptError.textContent = '\u2715 wrong password';
         promptError.classList.remove('hidden');

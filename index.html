@@ -149,8 +149,8 @@
           <pre id="admin-text"></pre>
         </div>
         <div id="admin-hashes" class="hash-bar hidden">
-          <span class="hash-label">paste</span> <code id="admin-paste-hash"></code>
-          <span class="hash-label">pubkey</span> <code id="admin-pubkey-hash"></code>
+          <span class="hash-label">sha-256 paste</span> <code id="admin-paste-hash"></code>
+          <span class="hash-label">sha-256 pubkey</span> <code id="admin-pubkey-hash"></code>
         </div>
         <div class="share-actions">
           <button id="admin-copy-text">copy text</button>
@@ -184,9 +184,18 @@
       <div class="read-frame">
         <pre id="decrypted-text"></pre>
       </div>
+      <div id="read-pgp-prompt" class="pgp-decrypt-prompt hidden">
+        <p class="decrypt-label">this paste is pgp-encrypted — provide your private key to decrypt</p>
+        <textarea id="read-pgp-privkey" placeholder="paste your armored PGP private key..." rows="4" aria-label="PGP private key"></textarea>
+        <div class="decrypt-row">
+          <input type="password" id="read-pgp-passphrase" placeholder="key passphrase" aria-label="PGP passphrase">
+          <button id="read-pgp-decrypt-btn">decrypt pgp</button>
+        </div>
+        <div id="read-pgp-error" class="error-text hidden"></div>
+      </div>
       <div id="read-hashes" class="hash-bar hidden">
-        <span class="hash-label">paste</span> <code id="read-paste-hash"></code>
-        <span class="hash-label">pubkey</span> <code id="read-pubkey-hash"></code>
+        <span class="hash-label">sha-256 paste</span> <code id="read-paste-hash"></code>
+        <span class="hash-label">sha-256 pubkey</span> <code id="read-pubkey-hash"></code>
       </div>
       <div class="share-actions">
         <button id="copy-text">copy</button>

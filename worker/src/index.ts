@@ -248,7 +248,7 @@ export default {
 			if (!['link', 'password', 'public', 'burn', 'deniable'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
-			const id = crypto.randomUUID().slice(0, 12);
+			const id = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
 			const now = Math.floor(Date.now() / 3600000) * 3600;
 			const expirySeconds = typeof expiry === 'number' && expiry > 0 ? expiry : undefined;
 

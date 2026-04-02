@@ -1,5 +1,11 @@
 import { argon2id_derive } from '../argon2-wasm/pkg/argon2_worker';
-import { pgp_encrypt, pgp_sign, pgp_fingerprint } from '../pgp-wasm/ink_pgp';
+// PGP module lazy-loaded on demand (avoids crashing worker on startup)
+let pgpMod: any = null;
+async function getPgp() {
+	if (pgpMod) return pgpMod;
+	pgpMod = await import('../pgp-wasm/ink_pgp');
+	return pgpMod;
+}
 
 // ─────────────────────────────────────────────
 // Types & Interfaces
@@ -496,7 +502,8 @@ export default {
 
 		// GET /worker-key — return the worker's PGP public key
 		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/worker-key') {
-			return json({ publicKey: env.WORKER_PGP_PUBLIC, fingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC) });
+			const pgp = await getPgp();
+			return json({ publicKey: env.WORKER_PGP_PUBLIC, fingerprint: pgp.pgp_fingerprint(env.WORKER_PGP_PUBLIC) });
 		}
 
 		// POST /handshake — generate 64-char key, PGP-encrypt to reader's pubkey, sign with worker's key
@@ -509,8 +516,10 @@ export default {
 			const readerPubKey = body.publicKey;
 			if (!readerPubKey || typeof readerPubKey !== 'string') return err('missing public key');
 
+			const pgp = await getPgp();
+
 			// Generate 64-char random key
-			const keyBytes = new Uint8Array(48); // 48 bytes → 64 chars base64
+			const keyBytes = new Uint8Array(48);
 			crypto.getRandomValues(keyBytes);
 			const key64 = btoa(String.fromCharCode(...keyBytes)).slice(0, 64);
 
@@ -518,31 +527,29 @@ export default {
 			const keyData = new TextEncoder().encode(key64);
 			let encryptedKey: Uint8Array;
 			try {
-				encryptedKey = pgp_encrypt(keyData, readerPubKey);
+				encryptedKey = pgp.pgp_encrypt(keyData, readerPubKey);
 			} catch (e: any) {
 				return err('pgp encrypt failed: ' + e.message, 500);
 			}
 
-			// Sign the encrypted blob with the worker's private key
-			// Reassemble worker secret key from two base64 halves
+			// Sign with worker's private key
 			const workerSecretKey = new TextDecoder().decode(
 				Uint8Array.from(atob(env.WORKER_PGP_SECRET_1 + env.WORKER_PGP_SECRET_2), c => c.charCodeAt(0))
 			);
 			let signature: Uint8Array;
 			try {
-				signature = pgp_sign(encryptedKey, workerSecretKey, env.WORKER_PGP_PASS);
+				signature = pgp.pgp_sign(encryptedKey, workerSecretKey, env.WORKER_PGP_PASS);
 			} catch (e: any) {
 				return err('pgp sign failed: ' + e.message, 500);
 			}
 
-			// Base64 encode for transport
 			const encB64 = btoa(String.fromCharCode(...encryptedKey));
 			const sigB64 = btoa(String.fromCharCode(...signature));
 
 			return json({
 				encryptedKey: encB64,
 				signature: sigB64,
-				workerFingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC),
+				workerFingerprint: pgp.pgp_fingerprint(env.WORKER_PGP_PUBLIC),
 			});
 		}
 

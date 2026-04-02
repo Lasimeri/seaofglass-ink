@@ -7,6 +7,11 @@ import { argon2id_derive } from '../argon2-wasm/pkg/argon2_worker';
 interface Env {
 	CF_API_TOKEN: string;
 	CF_ZONE_ID: string;
+	PURGE_SECRET: string;
+	WORKER_PGP_PUBLIC: string;
+	WORKER_PGP_SECRET_1: string;
+	WORKER_PGP_SECRET_2: string;
+	WORKER_PGP_PASS: string;
 }
 
 // CF_API_TOKEN should be scoped to: Zone → DNS → Edit

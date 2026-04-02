@@ -317,6 +317,18 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 
 /* ============================================================
+   Verification timer
+   ============================================================ */
+
+.verify-timer {
+  font-family: var(--mono); font-size: 0.7rem; color: var(--warn);
+  margin-top: 0.5rem; padding: 0.3rem 0.6rem;
+  border: 1px solid var(--warn); display: inline-block;
+}
+.verify-timer.urgent { color: var(--error); border-color: var(--error); animation: pulse 0.5s ease-in-out infinite; }
+.verify-timer.expired { color: var(--error); border-color: var(--error); }
+
+/* ============================================================
    PGP decrypt prompt
    ============================================================ */
 

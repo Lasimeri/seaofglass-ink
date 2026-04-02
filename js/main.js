@@ -590,6 +590,42 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   const adminPromptError = $('#admin-prompt-error');
   const adminContent = $('#admin-content');
 
+  // Verification timer — paste is deleted if not fully decrypted within 60 seconds
+  let verificationPassed = false;
+  const VERIFY_TIMEOUT = 60;
+  const verifyTimerEl = document.createElement('div');
+  verifyTimerEl.className = 'verify-timer';
+  verifyTimerEl.textContent = VERIFY_TIMEOUT + 's to verify';
+  document.querySelector('#admin-section .read-meta').appendChild(verifyTimerEl);
+
+  const verifyStart = Date.now();
+  const verifyInterval = setInterval(async () => {
+    if (verificationPassed) {
+      verifyTimerEl.remove();
+      clearInterval(verifyInterval);
+      return;
+    }
+    const elapsed = Math.floor((Date.now() - verifyStart) / 1000);
+    const remaining = VERIFY_TIMEOUT - elapsed;
+    if (remaining <= 0) {
+      clearInterval(verifyInterval);
+      verifyTimerEl.textContent = 'verification failed — deleting paste';
+      verifyTimerEl.classList.add('expired');
+      log('verification timeout — paste deleted', true);
+      try {
+        await remove(route.id, route.deleteToken, route.key || null, null);
+      } catch { /* delete may fail if already expired */ }
+      setTimeout(() => { location.href = '/'; }, 2000);
+      return;
+    }
+    verifyTimerEl.textContent = remaining + 's to verify';
+    if (remaining <= 10) verifyTimerEl.classList.add('urgent');
+  }, 1000);
+
+  function markVerified() {
+    verificationPassed = true;
+  }
+
   log('fetching paste...');
 
   loadDirect(route.id, true).then(async record => {
@@ -654,6 +690,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
               pgpPrompt.classList.add('hidden');
               renderNumberedText(adminText, decoded);
               adminContent.classList.remove('hidden');
+              markVerified();
               setupScrollIndicator(adminText.closest('.read-frame'));
               setupWrapToggle($('#admin-wrap'), adminText);
               showHashes('admin', decoded, pubkey);
@@ -668,6 +705,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         } else {
           renderNumberedText(adminText, text);
           adminContent.classList.remove('hidden');
+          markVerified();
           setupScrollIndicator(adminText.closest('.read-frame'));
           setupWrapToggle($('#admin-wrap'), adminText);
           showHashes('admin', text, pubkey);
@@ -726,6 +764,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
                 pgpPrompt.classList.add('hidden');
                 renderNumberedText(adminText, decoded);
                 adminContent.classList.remove('hidden');
+              markVerified();
                 setupScrollIndicator(adminText.closest('.read-frame'));
                 setupWrapToggle($('#admin-wrap'), adminText);
                 showHashes('admin', decoded, adminPubkey);
@@ -740,6 +779,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           } else {
             renderNumberedText(adminText, adminDecText);
             adminContent.classList.remove('hidden');
+            markVerified();
             setupScrollIndicator(adminText.closest('.read-frame'));
             setupWrapToggle($('#admin-wrap'), adminText);
             showHashes('admin', adminDecText, adminPubkey);

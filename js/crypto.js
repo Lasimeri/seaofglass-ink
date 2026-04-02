@@ -1,6 +1,20 @@
 // AES-256-GCM encrypt/decrypt
-// Pipeline: plaintext -> compress (deflate) -> encrypt -> base64url
+// Pipeline: plaintext -> compress (zstd) -> pad -> encrypt -> base64url
 // Compression UNDER encryption so ciphertext is smaller
+// Backward compat: decompress auto-detects zstd vs deflate via magic bytes
+
+import { zstdCompress, zstdDecompress, argon2idDerive } from './wasm.js?v=10';
+
+const ZSTD_MAGIC = [0x28, 0xB5, 0x2F, 0xFD];
+const ARGON2_MAGIC = [0x49, 0x4E, 0x4B, 0x31]; // "INK1"
+
+function isZstd(data) {
+  return data.length >= 4 && data[0] === 0x28 && data[1] === 0xB5 && data[2] === 0x2F && data[3] === 0xFD;
+}
+
+function isArgon2Format(buf) {
+  return buf.length >= 4 && buf[0] === 0x49 && buf[1] === 0x4E && buf[2] === 0x4B && buf[3] === 0x31;
+}
 
 // --- Key management ---
 
@@ -44,30 +58,45 @@ export async function decrypt(encoded, key) {
   }
 }
 
-// --- Password mode: PBKDF2 -> AES-GCM ---
+// --- Password mode: Argon2id -> AES-GCM (with PBKDF2 fallback for old pastes) ---
+// New format: [4-byte "INK1"][16-byte salt][12-byte IV][ciphertext]
+// Old format: [16-byte salt][12-byte IV][ciphertext] (PBKDF2)
 
 export async function encryptWithPassword(plaintext, password) {
   const compressed = await compress(new TextEncoder().encode(plaintext));
   const padded = padToBlock(compressed);
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
+  const key = await deriveKeyArgon2(password, salt);
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, padded);
-  const out = new Uint8Array(16 + 12 + ct.byteLength);
-  out.set(salt);
-  out.set(iv, 16);
-  out.set(new Uint8Array(ct), 28);
+  // INK1 magic + salt + iv + ciphertext
+  const out = new Uint8Array(4 + 16 + 12 + ct.byteLength);
+  out.set(ARGON2_MAGIC);
+  out.set(salt, 4);
+  out.set(iv, 20);
+  out.set(new Uint8Array(ct), 32);
   return base64url(out);
 }
 
 export async function decryptWithPassword(encoded, password) {
   const buf = unbase64url(encoded);
-  const salt = buf.slice(0, 16);
-  const iv = buf.slice(16, 28);
-  const ct = buf.slice(28);
-  const key = await deriveKey(password, salt);
+  let salt, iv, ct, key;
+
+  if (isArgon2Format(buf)) {
+    // New Argon2id format
+    salt = buf.slice(4, 20);
+    iv = buf.slice(20, 32);
+    ct = buf.slice(32);
+    key = await deriveKeyArgon2(password, salt);
+  } else {
+    // Legacy PBKDF2 format
+    salt = buf.slice(0, 16);
+    iv = buf.slice(16, 28);
+    ct = buf.slice(28);
+    key = await deriveKeyPBKDF2(password, salt);
+  }
+
   const decrypted = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
-  // Try padded format first, fall back to legacy unpadded
   try {
     return new TextDecoder().decode(await decompress(unpad(decrypted)));
   } catch {
@@ -75,7 +104,17 @@ export async function decryptWithPassword(encoded, password) {
   }
 }
 
-async function deriveKey(password, salt) {
+async function deriveKeyArgon2(password, salt) {
+  const rawKey = await argon2idDerive(password, salt, {
+    memory: 65536,    // 64MB
+    iterations: 3,
+    parallelism: 1,
+    outputLen: 32,
+  });
+  return crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function deriveKeyPBKDF2(password, salt) {
   const raw = new TextEncoder().encode(password);
   const material = await crypto.subtle.importKey('raw', raw, 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
@@ -112,9 +151,27 @@ function unpad(buf) {
   return buf.slice(2, 2 + len);
 }
 
-// --- Compression (deflate) ---
+// --- Compression ---
 
+// New pastes use zstd; old pastes used deflate. Auto-detect on decompress.
 async function compress(data) {
+  try {
+    return await zstdCompress(data, 3);
+  } catch {
+    // WASM not available — fall back to deflate
+    return deflateCompress(data);
+  }
+}
+
+async function decompress(data) {
+  if (isZstd(data)) {
+    return zstdDecompress(data);
+  }
+  return deflateDecompress(data);
+}
+
+// Legacy deflate (fallback for old pastes + WASM-unavailable environments)
+async function deflateCompress(data) {
   const cs = new CompressionStream('deflate');
   const w = cs.writable.getWriter();
   w.write(data);
@@ -122,7 +179,7 @@ async function compress(data) {
   return new Uint8Array(await new Response(cs.readable).arrayBuffer());
 }
 
-async function decompress(data) {
+async function deflateDecompress(data) {
   const ds = new DecompressionStream('deflate');
   const w = ds.writable.getWriter();
   w.write(data);
@@ -134,7 +191,9 @@ async function decompress(data) {
 
 export async function estimateSizes(plaintext) {
   const raw = new TextEncoder().encode(plaintext);
-  const compressed = await compress(raw);
+  let compressed;
+  try { compressed = await compress(raw); }
+  catch { compressed = await deflateCompress(raw); }
   const withHeader = 2 + compressed.byteLength;
   let padded = Math.ceil(withHeader / 256) * 256;
   if (padded === withHeader) padded += 256;
@@ -165,14 +224,16 @@ export async function encryptRaw(plaintext, key) {
 export async function encryptRawWithPassword(plaintext, password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
+  const key = await deriveKeyArgon2(password, salt);
   const ct = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)
   );
-  const out = new Uint8Array(16 + 12 + ct.byteLength);
-  out.set(salt);
-  out.set(iv, 16);
-  out.set(new Uint8Array(ct), 28);
+  // INK1 magic + salt + iv + ciphertext
+  const out = new Uint8Array(4 + 16 + 12 + ct.byteLength);
+  out.set(ARGON2_MAGIC);
+  out.set(salt, 4);
+  out.set(iv, 20);
+  out.set(new Uint8Array(ct), 32);
   return base64url(out);
 }
 

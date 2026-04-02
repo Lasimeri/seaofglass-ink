@@ -1,0 +1,17 @@
+{
+  "name": "argon2-worker",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "argon2_worker_bg.wasm",
+    "argon2_worker.js",
+    "argon2_worker_bg.js",
+    "argon2_worker.d.ts"
+  ],
+  "main": "argon2_worker.js",
+  "types": "argon2_worker.d.ts",
+  "sideEffects": [
+    "./argon2_worker.js",
+    "./snippets/*"
+  ]
+}

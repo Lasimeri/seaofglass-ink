@@ -1,3 +1,5 @@
+import { argon2id_derive } from '../argon2-wasm/pkg/argon2_worker';
+
 // ─────────────────────────────────────────────
 // Types & Interfaces
 // ─────────────────────────────────────────────
@@ -90,19 +92,35 @@ async function decryptRawWithKey(encoded: string, keyStr: string): Promise<strin
 	return new TextDecoder().decode(decrypted);
 }
 
-/** Decrypt PBKDF2+AES-GCM encrypted metadata using a password */
+/** Decrypt password-encrypted metadata — auto-detects Argon2id (INK1 prefix) vs legacy PBKDF2 */
 async function decryptRawWithPassword(encoded: string, password: string): Promise<string> {
 	const buf = unbase64url(encoded);
-	const salt = buf.slice(0, 16);
-	const iv = buf.slice(16, 28);
-	const ct = buf.slice(28);
-	const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-	const key = await crypto.subtle.deriveKey(
-		{ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-		material,
-		{ name: 'AES-GCM', length: 256 },
-		false, ['decrypt']
-	);
+	let salt: Uint8Array, iv: Uint8Array, ct: Uint8Array, key: CryptoKey;
+
+	// INK1 magic = Argon2id format
+	if (buf.length >= 4 && buf[0] === 0x49 && buf[1] === 0x4E && buf[2] === 0x4B && buf[3] === 0x31) {
+		salt = buf.slice(4, 20);
+		iv = buf.slice(20, 32);
+		ct = buf.slice(32);
+		const rawKey = argon2id_derive(
+			new TextEncoder().encode(password), salt,
+			65536, 3, 1, 32  // 64MB, 3 iterations, 1 thread, 32-byte output
+		);
+		key = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['decrypt']);
+	} else {
+		// Legacy PBKDF2 format
+		salt = buf.slice(0, 16);
+		iv = buf.slice(16, 28);
+		ct = buf.slice(28);
+		const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+		key = await crypto.subtle.deriveKey(
+			{ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+			material,
+			{ name: 'AES-GCM', length: 256 },
+			false, ['decrypt']
+		);
+	}
+
 	const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
 	return new TextDecoder().decode(decrypted);
 }

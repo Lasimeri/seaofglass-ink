@@ -57,6 +57,39 @@ export async function fuzzySearch(text, query, maxResults = 50) {
   return JSON.parse(json);
 }
 
+// ─── Ed25519 signatures ───
+
+export async function ed25519Keygen() {
+  const mod = await init();
+  const bytes = mod.ed25519_keygen(); // 64 bytes: [32 secret][32 public]
+  return { secret: bytes.slice(0, 32), public: bytes.slice(32) };
+}
+
+export async function ed25519Sign(secretKey, message) {
+  const mod = await init();
+  const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+  return mod.ed25519_sign(secretKey, msg); // 64-byte signature
+}
+
+export async function ed25519Verify(publicKey, message, signature) {
+  const mod = await init();
+  const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+  return mod.ed25519_verify(publicKey, msg, signature); // boolean
+}
+
+// ─── Shamir's Secret Sharing ───
+
+export async function shamirSplit(secret, totalShares, threshold) {
+  const mod = await init();
+  const data = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret;
+  return mod.shamir_split(data, totalShares, threshold); // packed binary
+}
+
+export async function shamirCombine(packedShares) {
+  const mod = await init();
+  return mod.shamir_combine(packedShares); // Uint8Array of original secret
+}
+
 // ─── Status ───
 
 export async function isLoaded() {

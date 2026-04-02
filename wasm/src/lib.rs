@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use sss_rs::prelude::{share, reconstruct};
 
 // ─── Compression (zstd) ───
 
@@ -140,6 +141,97 @@ pub fn fuzzy_search(text: &str, query: &str, max_results: u32) -> String {
     json.push(']');
     json
 }
+
+// ─── Ed25519 signatures ───
+
+#[wasm_bindgen]
+pub fn ed25519_keygen() -> Vec<u8> {
+    use ed25519_dalek::SigningKey;
+    use rand_core::OsRng;
+    let sk = SigningKey::generate(&mut OsRng);
+    // Return 64 bytes: [32-byte secret][32-byte public]
+    let mut out = Vec::with_capacity(64);
+    out.extend_from_slice(sk.as_bytes());
+    out.extend_from_slice(sk.verifying_key().as_bytes());
+    out
+}
+
+#[wasm_bindgen]
+pub fn ed25519_sign(secret_key: &[u8], message: &[u8]) -> Result<Vec<u8>, JsError> {
+    use ed25519_dalek::{Signer, SigningKey};
+    if secret_key.len() != 32 {
+        return Err(JsError::new("secret key must be 32 bytes"));
+    }
+    let sk = SigningKey::from_bytes(secret_key.try_into().unwrap());
+    let sig = sk.sign(message);
+    Ok(sig.to_bytes().to_vec())
+}
+
+#[wasm_bindgen]
+pub fn ed25519_verify(public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<bool, JsError> {
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+    if public_key.len() != 32 {
+        return Err(JsError::new("public key must be 32 bytes"));
+    }
+    if signature.len() != 64 {
+        return Err(JsError::new("signature must be 64 bytes"));
+    }
+    let vk = VerifyingKey::from_bytes(public_key.try_into().unwrap())
+        .map_err(|e| JsError::new(&e.to_string()))?;
+    let sig = Signature::from_bytes(signature.try_into().unwrap());
+    Ok(vk.verify(message, &sig).is_ok())
+}
+
+// ─── Shamir's Secret Sharing ───
+
+#[wasm_bindgen]
+pub fn shamir_split(secret: &[u8], shares_count: u8, threshold: u8) -> Result<Vec<u8>, JsError> {
+    if threshold < 2 || threshold > shares_count {
+        return Err(JsError::new("threshold must be >= 2 and <= shares_count"));
+    }
+
+    // sss_rs::share returns Vec<Vec<u8>> — one vec per share
+    let shares: Vec<Vec<u8>> = share(secret, shares_count, threshold, true)
+        .map_err(|e| JsError::new(&format!("{:?}", e)))?;
+
+    // Pack: [1-byte threshold][1-byte count][per share: 2-byte-BE len + data]
+    let mut out = Vec::new();
+    out.push(threshold);
+    out.push(shares_count);
+    for s in shares.iter() {
+        let len = s.len() as u16;
+        out.push((len >> 8) as u8);
+        out.push((len & 0xff) as u8);
+        out.extend_from_slice(s);
+    }
+    Ok(out)
+}
+
+#[wasm_bindgen]
+pub fn shamir_combine(packed_shares: &[u8]) -> Result<Vec<u8>, JsError> {
+    if packed_shares.len() < 2 {
+        return Err(JsError::new("invalid packed shares"));
+    }
+    let _threshold = packed_shares[0];
+    let _count = packed_shares[1];
+
+    let mut pos = 2usize;
+    let mut shares: Vec<Vec<u8>> = Vec::new();
+    while pos + 2 <= packed_shares.len() {
+        let len = ((packed_shares[pos] as usize) << 8) | (packed_shares[pos + 1] as usize);
+        pos += 2;
+        if pos + len > packed_shares.len() {
+            return Err(JsError::new("truncated share data"));
+        }
+        shares.push(packed_shares[pos..pos + len].to_vec());
+        pos += len;
+    }
+
+    reconstruct(&shares, true)
+        .map_err(|e| JsError::new(&format!("{:?}", e)))
+}
+
+// ─── Helpers ───
 
 fn json_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);

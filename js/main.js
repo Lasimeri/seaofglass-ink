@@ -5,6 +5,7 @@ import {
 } from './crypto.js?v=10';
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=10';
 import { renderQR } from './qr.js?v=10';
+import { downloadPDF } from './pdf.js?v=10';
 
 const $ = s => document.querySelector(s);
 
@@ -571,6 +572,12 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
     downloadText(adminText.dataset.raw || adminText.textContent);
   });
 
+  $('#admin-pdf').addEventListener('click', () => {
+    const raw = adminText.dataset.raw || adminText.textContent;
+    const title = adminTitle.textContent || undefined;
+    downloadPDF(raw, 'paste.pdf', { title });
+  });
+
   // Delete
   let deleted = false;
   adminDeleteBtn.addEventListener('click', async () => {
@@ -654,6 +661,12 @@ if (route.mode === 'read') {
 
   $('#read-download').addEventListener('click', () => {
     downloadText(decryptedText.dataset.raw || decryptedText.textContent);
+  });
+
+  $('#read-pdf').addEventListener('click', () => {
+    const raw = decryptedText.dataset.raw || decryptedText.textContent;
+    const title = readTitle.textContent || undefined;
+    downloadPDF(raw, 'paste.pdf', { title });
   });
 }
 

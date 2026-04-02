@@ -336,6 +336,50 @@ export async function encryptRawWithPassword(plaintext, password) {
   return base64url(out);
 }
 
+// --- Multi-record chunking with Merkle root ---
+
+const CHUNK_COUNT = 4;
+const MAX_CHUNK_DATA = 3400; // leave room for JSON envelope per record
+
+export function splitIntoChunks(data) {
+  // data is a base64url string — split into CHUNK_COUNT equal parts
+  const chunkSize = Math.ceil(data.length / CHUNK_COUNT);
+  const chunks = [];
+  for (let i = 0; i < CHUNK_COUNT; i++) {
+    chunks.push(data.slice(i * chunkSize, (i + 1) * chunkSize));
+  }
+  return chunks;
+}
+
+export function reassembleChunks(chunks) {
+  // chunks is array of strings sorted by index — concatenate
+  return chunks.join('');
+}
+
+export async function computeMerkleRoot(chunks) {
+  // SHA-256 each chunk, then pairwise hash up to root
+  // For 4 chunks: root = H(H(c0||c1) || H(c2||c3))
+  const leaves = await Promise.all(chunks.map(c => sha256hex(c)));
+
+  // Pad to power of 2 (already 4, which is 2^2)
+  let level = leaves;
+  while (level.length > 1) {
+    const next = [];
+    for (let i = 0; i < level.length; i += 2) {
+      const left = level[i];
+      const right = level[i + 1] || left; // duplicate last if odd
+      next.push(await sha256hex(left + right));
+    }
+    level = next;
+  }
+  return level[0];
+}
+
+export async function verifyMerkleRoot(chunks, expectedRoot) {
+  const computed = await computeMerkleRoot(chunks);
+  return computed === expectedRoot;
+}
+
 // --- Base64url encoding ---
 
 export function base64url(buf) {

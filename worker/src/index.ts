@@ -244,20 +244,43 @@ export default {
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
-			const { data, title, mode, key: publicKey, h: encryptedH, expiry, p: pgpKey } = body;
-			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
+			const { chunks, merkleRoot, data, title, mode, key: publicKey, h: encryptedH, expiry, p: pgpKey } = body;
 			if (!['link', 'password', 'public', 'burn', 'deniable'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
 			const id = crypto.randomUUID().slice(0, 12);
+			const now = Math.floor(Date.now() / 3600000) * 3600;
 			const expirySeconds = typeof expiry === 'number' && expiry > 0 ? expiry : undefined;
 
+			// v2: chunked storage with Merkle root
+			if (chunks && Array.isArray(chunks) && chunks.length > 0 && merkleRoot) {
+				for (let i = 0; i < chunks.length; i++) {
+					const rec: Record<string, unknown> = { v: 2, n: chunks.length, i, d: chunks[i] };
+					if (i === 0) {
+						// Chunk 0 carries metadata
+						rec.mr = merkleRoot;
+						rec.m = mode;
+						rec.c = now;
+						if (encryptedH) rec.h = encryptedH;
+						if (title) rec.t = title;
+						if (publicKey && mode === 'public') rec.k = publicKey;
+						if (expirySeconds) rec.e = now + expirySeconds;
+						if (pgpKey) rec.p = pgpKey;
+					}
+					const content = JSON.stringify(rec);
+					if (content.length > MAX_RECORD_LEN) return err(`chunk ${i} too large (${content.length})`, 413);
+					const ok = await dnsCreate(env, id, content);
+					if (!ok) return err(`chunk ${i} storage failed`, 500);
+				}
+				return json({ id }, 201);
+			}
+
+			// v1 fallback: single record (legacy / small pastes)
+			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
 			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined, expirySeconds, pgpKey || undefined);
 			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
-
 			const ok = await dnsCreate(env, id, record);
 			if (!ok) return err('storage failed', 500);
-
 			return json({ id }, 201);
 		}
 
@@ -274,8 +297,16 @@ export default {
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
 
+			// Find the metadata record (chunk 0 in v2, or the single record in v1)
 			let parsed: any;
-			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
+			for (const rec of records) {
+				try {
+					const p = JSON.parse(rec.content);
+					if (p.h) { parsed = p; break; } // found the record with delete hash
+					if (!parsed) parsed = p; // fallback to first parseable
+				} catch { /* skip */ }
+			}
+			if (!parsed) return err('corrupt record', 500);
 
 			// Check if delete capability has been revoked
 			if (!parsed.h) return err('delete token revoked', 403);
@@ -354,10 +385,46 @@ export default {
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
 
-			let parsed: any;
-			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
+			// Parse all records
+			const allParsed: any[] = [];
+			for (const rec of records) {
+				try { allParsed.push(JSON.parse(rec.content)); } catch { /* skip malformed */ }
+			}
+			if (!allParsed.length) return err('corrupt record', 500);
 
-			// Check expiry
+			// Detect v2 (chunked) vs v1 (single)
+			const isV2 = allParsed.some(p => p.v === 2);
+
+			if (isV2) {
+				const meta = allParsed.find(p => p.i === 0) || allParsed[0];
+
+				// Check expiry
+				if (meta.e) {
+					const now = Math.floor(Date.now() / 1000);
+					if (now > meta.e) {
+						for (const rec of records) await dnsDelete(env, rec.id);
+						return err('paste expired', 410);
+					}
+				}
+
+				// Strip delete hash from metadata
+				const cleanRecords = allParsed.map(p => {
+					const copy = { ...p };
+					delete copy.h;
+					return copy;
+				});
+
+				// Burn after read
+				if (meta.m === 'burn' && !url.searchParams.has('admin')) {
+					for (const rec of records) await dnsDelete(env, rec.id);
+				}
+
+				return json({ records: cleanRecords });
+			}
+
+			// v1 fallback
+			const parsed = allParsed[0];
+
 			if (parsed.e) {
 				const now = Math.floor(Date.now() / 1000);
 				if (now > parsed.e) {
@@ -368,7 +435,6 @@ export default {
 
 			delete parsed.h;
 
-			// Burn after read — return data then delete (skip for admin reads via ?admin=1)
 			if (parsed.m === 'burn' && !url.searchParams.has('admin')) {
 				for (const rec of records) await dnsDelete(env, rec.id);
 			}

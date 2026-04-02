@@ -28,6 +28,15 @@
 
     <!-- Create section -->
     <div id="create-section">
+      <details class="how-it-works">
+        <summary>how it works</summary>
+        <div class="how-content">
+          <p><strong>link-only</strong> — AES-256-GCM encrypted. key lives in the URL fragment, never sent to any server.</p>
+          <p><strong>password</strong> — encrypted with your password via PBKDF2 (100k iterations). no key in the URL.</p>
+          <p><strong>public</strong> — encrypted at rest but key is stored alongside data. anyone with the link can read.</p>
+          <p>pastes are stored as DNS TXT records. the static page is the only way to decrypt them.</p>
+        </div>
+      </details>
       <div class="toolbar">
         <div class="toolbar-group">
           <input type="text" id="title-input" placeholder="title (optional)" aria-label="Paste title">
@@ -47,7 +56,10 @@
       </div>
 
       <div class="editor-frame">
-        <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false" aria-label="Paste content" enterkeyhint="enter"></textarea>
+        <div class="editor-wrap">
+          <div id="editor-gutter" class="editor-gutter" aria-hidden="true"></div>
+          <textarea id="paste-input" placeholder="enter text to encrypt..." spellcheck="false" aria-label="Paste content" enterkeyhint="enter"></textarea>
+        </div>
         <div class="editor-footer">
           <span id="char-count">0 chars</span>
           <span id="line-count">1 line</span>
@@ -85,6 +97,7 @@
         </div>
         <div class="share-actions">
           <button id="admin-copy-text">copy text</button>
+          <button id="admin-raw">open raw</button>
         </div>
       </div>
 
@@ -94,6 +107,7 @@
           <input type="text" id="admin-share-link" readonly aria-label="Share link">
           <button id="admin-copy-link">copy</button>
         </div>
+        <canvas id="admin-qr" class="qr-canvas hidden"></canvas>
         <div class="share-actions">
           <a href="/" class="create-link">create another</a>
           <button id="admin-delete" class="danger-btn">delete paste</button>
@@ -110,7 +124,10 @@
       <div class="read-frame">
         <pre id="decrypted-text"></pre>
       </div>
-      <button id="copy-text">copy</button>
+      <div class="share-actions">
+        <button id="copy-text">copy</button>
+        <button id="read-raw">open raw</button>
+      </div>
     </div>
 
     <!-- Password prompt (reader password mode) -->
@@ -126,16 +143,6 @@
       </div>
       <div id="prompt-error" class="error-text hidden"></div>
     </div>
-
-    <details class="how-it-works">
-      <summary>how it works</summary>
-      <div class="how-content">
-        <p><strong>link-only</strong> — AES-256-GCM encrypted. key lives in the URL fragment, never sent to any server.</p>
-        <p><strong>password</strong> — encrypted with your password via PBKDF2 (100k iterations). no key in the URL.</p>
-        <p><strong>public</strong> — encrypted at rest but key is stored alongside data. anyone with the link can read.</p>
-        <p>pastes are stored as DNS TXT records. the static page is the only way to decrypt them.</p>
-      </div>
-    </details>
 
     <hr class="sep">
 

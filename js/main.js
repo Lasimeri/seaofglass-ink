@@ -4,6 +4,7 @@ import {
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
 } from './crypto.js?v=3';
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=3';
+import { renderQR } from './qr.js?v=1';
 
 const $ = s => document.querySelector(s);
 
@@ -83,6 +84,36 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function showNotFound(msg) {
+  const c = document.querySelector('.container');
+  c.querySelectorAll('#create-section,#admin-section,#read-section,#password-prompt').forEach(el => el.classList.add('hidden'));
+  const el = document.createElement('div');
+  el.className = 'not-found';
+  el.innerHTML = `<p>${esc(msg)}</p><a href="/">create a new paste</a>`;
+  c.appendChild(el);
+}
+
+function renderNumberedText(pre, text) {
+  pre.dataset.raw = text;
+  const lines = text.split('\n');
+  pre.innerHTML = lines.map((line, i) =>
+    `<span class="line"><span class="ln">${i + 1}</span>${esc(line)}</span>`
+  ).join('\n');
+}
+
+function setupScrollIndicator(frame) {
+  const pre = frame.querySelector('pre');
+  if (!pre) return;
+  const check = () => {
+    const hasOverflow = pre.scrollHeight > pre.clientHeight;
+    const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+    frame.classList.toggle('has-overflow', hasOverflow && !atBottom);
+    frame.classList.toggle('scrolled-bottom', atBottom);
+  };
+  pre.addEventListener('scroll', check);
+  requestAnimationFrame(check);
+}
+
 // Double-click password fields to toggle visibility
 document.querySelectorAll('input[type="password"]').forEach(input => {
   input.addEventListener('dblclick', () => {
@@ -141,6 +172,18 @@ if (route.mode === 'create') {
       createBtn.click();
     }
   });
+
+  // Editor line-number gutter
+  const gutter = $('#editor-gutter');
+  function updateGutter() {
+    const lines = editor.value.split('\n').length;
+    const nums = [];
+    for (let i = 1; i <= lines; i++) nums.push(i);
+    gutter.textContent = nums.join('\n');
+  }
+  editor.addEventListener('input', updateGutter);
+  editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop; });
+  updateGutter();
 
   async function calcSizes() {
     const text = editor.value;
@@ -297,6 +340,15 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
       // Build reader share link (no delete token)
       adminShareLink.value = `${location.origin}/#${route.id}:${route.key}`;
 
+      // QR code for share link
+      const qrCanvas = $('#admin-qr');
+      if (qrCanvas && adminShareLink.value) {
+        try {
+          renderQR(qrCanvas, adminShareLink.value);
+          qrCanvas.classList.remove('hidden');
+        } catch { /* QR generation failed — hide canvas */ }
+      }
+
       // Decrypt and show
       log('decrypting...');
       try {
@@ -306,8 +358,9 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           catch { adminTitle.textContent = record.t; }
         }
         const text = await decrypt(record.d, key);
-        adminText.textContent = text;
+        renderNumberedText(adminText, text);
         adminContent.classList.remove('hidden');
+        setupScrollIndicator(adminText.closest('.read-frame'));
         log('');
       } catch (e) {
         log(e.message, true);
@@ -315,6 +368,16 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
     } else {
       // Admin password mode — need password to decrypt
       adminShareLink.value = `${location.origin}/#p:${route.id}`;
+
+      // QR code for share link
+      const qrCanvas = $('#admin-qr');
+      if (qrCanvas && adminShareLink.value) {
+        try {
+          renderQR(qrCanvas, adminShareLink.value);
+          qrCanvas.classList.remove('hidden');
+        } catch { /* QR generation failed — hide canvas */ }
+      }
+
       adminPasswordPrompt.classList.remove('hidden');
       log('enter password to decrypt');
 
@@ -331,8 +394,9 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           }
           adminPassword = pw; // retain for delete/revoke
           adminPasswordPrompt.classList.add('hidden');
-          adminText.textContent = text;
+          renderNumberedText(adminText, text);
           adminContent.classList.remove('hidden');
+          setupScrollIndicator(adminText.closest('.read-frame'));
           log('');
         } catch {
           adminPromptError.textContent = '\u2715 wrong password';
@@ -345,7 +409,10 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
       adminPromptInput.onkeydown = e => { if (e.key === 'Enter') doDecrypt(); };
       adminPromptInput.focus();
     }
-  }).catch(e => log(e.message, true));
+  }).catch(e => {
+    if (/not found/i.test(e.message)) showNotFound(e.message);
+    else log(e.message, true);
+  });
 
   // Copy link
   adminCopyLink.addEventListener('click', () => {
@@ -364,9 +431,15 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
 
   // Copy text
   adminCopyText.addEventListener('click', () => {
-    navigator.clipboard.writeText(adminText.textContent);
+    navigator.clipboard.writeText(adminText.dataset.raw || adminText.textContent);
     adminCopyText.textContent = '\u2713 copied';
     setTimeout(() => adminCopyText.textContent = 'copy', 1500);
+  });
+
+  // Open raw
+  $('#admin-raw').addEventListener('click', () => {
+    const raw = adminText.dataset.raw || adminText.textContent;
+    window.open('data:text/plain;charset=utf-8,' + encodeURIComponent(raw));
   });
 
   // Delete
@@ -428,14 +501,23 @@ if (route.mode === 'read') {
       catch { readTitle.textContent = record.t; }
     }
     const text = await decrypt(record.d, key);
-    decryptedText.textContent = text;
+    renderNumberedText(decryptedText, text);
+    setupScrollIndicator(decryptedText.closest('.read-frame'));
     log('decrypted');
-  }).catch(e => log(e.message, true));
+  }).catch(e => {
+    if (/not found/i.test(e.message)) showNotFound(e.message);
+    else log(e.message, true);
+  });
 
   copyTextBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(decryptedText.textContent);
+    navigator.clipboard.writeText(decryptedText.dataset.raw || decryptedText.textContent);
     copyTextBtn.textContent = '\u2713 copied';
     setTimeout(() => copyTextBtn.textContent = 'copy', 1500);
+  });
+
+  $('#read-raw').addEventListener('click', () => {
+    const raw = decryptedText.dataset.raw || decryptedText.textContent;
+    window.open('data:text/plain;charset=utf-8,' + encodeURIComponent(raw));
   });
 }
 
@@ -483,7 +565,8 @@ if (route.mode === 'password') {
         readSection.classList.remove('hidden');
         if (decTitle) readTitle.textContent = decTitle;
         if (record.c) readDate.textContent = fmtDate(record.c);
-        decryptedText.textContent = text;
+        renderNumberedText(decryptedText, text);
+        setupScrollIndicator(decryptedText.closest('.read-frame'));
         log('decrypted');
       } catch {
         promptError.textContent = '\u2715 wrong password';
@@ -495,10 +578,14 @@ if (route.mode === 'password') {
     promptBtn.onclick = doDecrypt;
     promptInput.onkeydown = e => { if (e.key === 'Enter') doDecrypt(); };
     promptInput.focus();
-  }).catch(e => log(e.message, true));
+  }).catch(e => {
+    if (/not found/i.test(e.message)) showNotFound(e.message);
+    else log(e.message, true);
+  });
 
   copyTextBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText($('#decrypted-text').textContent);
+    const dt = $('#decrypted-text');
+    navigator.clipboard.writeText(dt.dataset.raw || dt.textContent);
     copyTextBtn.textContent = '\u2713 copied';
     setTimeout(() => copyTextBtn.textContent = 'copy', 1500);
   });

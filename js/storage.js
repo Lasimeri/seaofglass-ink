@@ -23,8 +23,10 @@ export async function store(data, title, mode, publicKey) {
 }
 
 export async function remove(id, deleteToken) {
-  const res = await fetch(`${WORKER_URL}/paste/${id}?token=${encodeURIComponent(deleteToken)}`, {
+  const res = await fetch(`${WORKER_URL}/paste/${id}`, {
     method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: deleteToken }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -56,7 +58,7 @@ export async function load(id) {
   let raw = dns.Answer[0].data;
   try { raw = JSON.parse(raw); } catch { raw = raw.replace(/^"|"$/g, ''); }
   try { return JSON.parse(raw); }
-  catch { return { d: raw, m: 'link', c: 0 }; }
+  catch { throw new Error('corrupt paste data'); }
 }
 
 // --- Public directory ---

@@ -43,6 +43,7 @@ function cors(res: Response): Response {
 	h.set('Access-Control-Allow-Methods', 'POST, DELETE, GET, OPTIONS');
 	h.set('Access-Control-Allow-Headers', 'Content-Type');
 	h.set('Access-Control-Max-Age', '86400');
+	h.set('Vary', 'Origin');
 	return new Response(res.body, { status: res.status, headers: h });
 }
 
@@ -168,15 +169,19 @@ export default {
 
 		// POST /store — create a new paste
 		if (request.method === 'POST' && url.pathname === '/store') {
+			const ct = request.headers.get('Content-Type');
+			if (!ct || !ct.includes('application/json')) return err('invalid content type');
+
 			let body: any;
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
 			const { data, title, mode, key: publicKey } = body;
-			if (!data || typeof data !== 'string') return err('missing data');
+			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
 			if (!['link', 'password', 'public'].includes(mode)) return err('invalid mode');
+			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
-			const id = crypto.randomUUID().slice(0, 8);
+			const id = crypto.randomUUID().slice(0, 12);
 			const deleteToken = crypto.randomUUID();
 			const deleteHash = await sha256hex(deleteToken);
 
@@ -189,13 +194,15 @@ export default {
 			return json({ id, deleteToken }, 201);
 		}
 
-		// DELETE /paste/:id?token=xxx — delete a paste by ID with valid token
+		// DELETE /paste/:id — delete a paste by ID with valid token (in body)
 		if (request.method === 'DELETE' && url.pathname.startsWith('/paste/')) {
 			const id = url.pathname.slice(7);
-			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+			if (!/^[a-f0-9]{8,12}$/.test(id)) return err('invalid id');
 
-			const token = url.searchParams.get('token');
-			if (!token) return err('missing delete token', 403);
+			let deleteBody: any;
+			try { deleteBody = await request.json(); } catch { return err('invalid json'); }
+			const token = deleteBody?.token;
+			if (!token || typeof token !== 'string') return err('missing delete token', 403);
 
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
@@ -221,7 +228,7 @@ export default {
 		// POST /revoke/:id — permanently revoke delete capability (called via sendBeacon on tab close)
 		if (request.method === 'POST' && url.pathname.startsWith('/revoke/')) {
 			const id = url.pathname.slice(8);
-			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+			if (!/^[a-f0-9]{8,12}$/.test(id)) return err('invalid id');
 
 			let body: any;
 			try { body = await request.json(); } catch { return err('invalid json'); }
@@ -249,9 +256,9 @@ export default {
 		}
 
 		// GET /read/:id — read paste directly from CF API (bypasses DNS propagation delay)
-		if (request.method === 'GET' && url.pathname.startsWith('/read/')) {
+		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname.startsWith('/read/')) {
 			const id = url.pathname.slice(6);
-			if (!/^[a-f0-9]{8}$/.test(id)) return err('invalid id');
+			if (!/^[a-f0-9]{8,12}$/.test(id)) return err('invalid id');
 
 			const records = await dnsFind(env, id);
 			if (!records.length) return err('not found', 404);
@@ -259,11 +266,12 @@ export default {
 			let parsed: any;
 			try { parsed = JSON.parse(records[0].content); } catch { return err('corrupt record', 500); }
 
+			delete parsed.h;
 			return json(parsed);
 		}
 
 		// GET /public — list all public pastes, newest first
-		if (request.method === 'GET' && url.pathname === '/public') {
+		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/public') {
 			const records = await dnsListAll(env);
 			const publicPastes: any[] = [];
 			for (const rec of records) {

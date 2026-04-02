@@ -66,7 +66,8 @@ function fmtDate(ts) {
 }
 
 function esc(s) {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ============================================================
@@ -198,6 +199,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   const adminSection = $('#admin-section');
   createSection.classList.add('hidden');
   adminSection.classList.remove('hidden');
+  history.replaceState(null, '', location.pathname);
 
   const adminTitle = $('#admin-title');
   const adminDate = $('#admin-date');
@@ -322,6 +324,7 @@ if (route.mode === 'read') {
   const readSection = $('#read-section');
   createSection.classList.add('hidden');
   readSection.classList.remove('hidden');
+  history.replaceState(null, '', location.pathname);
 
   const readTitle = $('#read-title');
   const readDate = $('#read-date');
@@ -360,6 +363,7 @@ if (route.mode === 'password') {
   const readSection = $('#read-section');
   createSection.classList.add('hidden');
   passwordPrompt.classList.remove('hidden');
+  history.replaceState(null, '', location.pathname);
 
   const promptTitle = $('#prompt-title');
   const promptDate = $('#prompt-date');
@@ -430,7 +434,7 @@ async function loadDirectory() {
       return;
     }
     dirList.innerHTML = pastes.map(p => `
-      <a href="/#${p.id}:${p.key}" target="_blank" rel="noopener" class="dir-entry">
+      <a href="/#${esc(p.id)}:${esc(p.key)}" target="_blank" rel="noopener" class="dir-entry">
         <span class="dir-title">${esc(p.title)}</span>
         <span class="dir-date">${fmtDate(p.created)}</span>
       </a>

@@ -7,6 +7,7 @@ import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './stora
 import { renderQR } from './qr.js?v=10';
 import { downloadPDF } from './pdf.js?v=10';
 import { fuzzySearch, markdownToHtml } from './wasm.js?v=10';
+import { highlight, detectLanguage } from './highlight.js?v=10';
 
 const $ = s => document.querySelector(s);
 
@@ -113,6 +114,20 @@ function renderNumberedText(pre, text) {
     pre.querySelectorAll('.line.highlighted').forEach(el => el.classList.remove('highlighted'));
     line.classList.toggle('highlighted');
   });
+  // Progressive syntax highlighting — runs async after initial render
+  if (detectLanguage(text)) {
+    highlight(text).then(html => {
+      if (!html) return;
+      const highlighted = html.split('\n');
+      const lineEls = pre.querySelectorAll('.line');
+      lineEls.forEach((el, i) => {
+        if (i < highlighted.length) {
+          const ln = el.querySelector('.ln').outerHTML;
+          el.innerHTML = ln + highlighted[i];
+        }
+      });
+    }).catch(() => {}); // WASM unavailable — keep plain text
+  }
 }
 
 function downloadText(text, filename) {

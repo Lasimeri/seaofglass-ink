@@ -1,8 +1,5 @@
 import { argon2id_derive } from '../argon2-wasm/pkg/argon2_worker';
-import { pgp_encrypt, pgp_sign, pgp_fingerprint } from '../pgp-wasm/ink_pgp_bg.js';
-import * as pgpWasm from '../pgp-wasm/ink_pgp_bg.wasm';
-import { __wbg_set_wasm } from '../pgp-wasm/ink_pgp_bg.js';
-__wbg_set_wasm(pgpWasm);
+// Worker uses native WebCrypto RSA for handshake (no WASM needed)
 
 // ─────────────────────────────────────────────
 // Types & Interfaces
@@ -12,10 +9,8 @@ interface Env {
 	CF_API_TOKEN: string;
 	CF_ZONE_ID: string;
 	PURGE_SECRET: string;
-	WORKER_PGP_PUBLIC: string;
-	WORKER_PGP_SECRET_1: string;
-	WORKER_PGP_SECRET_2: string;
-	WORKER_PGP_PASS: string;
+	WORKER_RSA_PUBLIC: string;
+	WORKER_RSA_PRIVATE: string;
 }
 
 // CF_API_TOKEN should be scoped to: Zone → DNS → Edit
@@ -497,54 +492,57 @@ export default {
 			return json({ purged: true });
 		}
 
-		// GET /worker-key — return the worker's PGP public key
+		// GET /worker-key — return the worker's RSA public key (JWK format)
 		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/worker-key') {
-			return json({ publicKey: env.WORKER_PGP_PUBLIC, fingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC) });
+			const jwk = JSON.parse(env.WORKER_RSA_PUBLIC);
+			// Compute fingerprint from modulus
+			const modBytes = Uint8Array.from(atob(jwk.n.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+			const fpBuf = await crypto.subtle.digest('SHA-256', modBytes);
+			const fingerprint = Array.from(new Uint8Array(fpBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+			return json({ publicKey: env.WORKER_RSA_PUBLIC, fingerprint });
 		}
 
-		// POST /handshake — generate 64-char key, PGP-encrypt to reader's pubkey, sign with worker's key
+		// POST /handshake — generate 64-char key, RSA-OAEP encrypt to reader's pubkey, sign with worker's key
 		if (request.method === 'POST' && url.pathname === '/handshake') {
 			const ct = request.headers.get('Content-Type');
 			if (!ct || !ct.includes('application/json')) return err('invalid content type');
 
 			let body: any;
 			try { body = await request.json(); } catch { return err('invalid json'); }
-			const readerPubKey = body.publicKey;
-			if (!readerPubKey || typeof readerPubKey !== 'string') return err('missing public key');
+			const readerPubJwk = body.publicKey;
+			if (!readerPubJwk) return err('missing public key');
+
+			// Import reader's RSA-OAEP public key
+			let readerKey: CryptoKey;
+			try {
+				const jwk = typeof readerPubJwk === 'string' ? JSON.parse(readerPubJwk) : readerPubJwk;
+				readerKey = await crypto.subtle.importKey('jwk', jwk, { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+			} catch (e: any) {
+				return err('invalid public key: ' + e.message);
+			}
 
 			// Generate 64-char random key
 			const keyBytes = new Uint8Array(48);
 			crypto.getRandomValues(keyBytes);
 			const key64 = btoa(String.fromCharCode(...keyBytes)).slice(0, 64);
 
-			// PGP-encrypt the 64-char key to the reader's public key
+			// RSA-OAEP encrypt the 64-char key to the reader's public key
 			const keyData = new TextEncoder().encode(key64);
-			let encryptedKey: Uint8Array;
-			try {
-				encryptedKey = pgp_encrypt(keyData, readerPubKey);
-			} catch (e: any) {
-				return err('pgp encrypt failed: ' + e.message, 500);
-			}
+			const encryptedBuf = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, readerKey, keyData);
+			const encB64 = btoa(String.fromCharCode(...new Uint8Array(encryptedBuf)));
 
-			// Sign with worker's private key
-			const workerSecretKey = new TextDecoder().decode(
-				Uint8Array.from(atob(env.WORKER_PGP_SECRET_1 + env.WORKER_PGP_SECRET_2), c => c.charCodeAt(0))
+			// Sign the encrypted blob with the worker's private key (RSASSA-PKCS1-v1_5)
+			const workerPrivJwk = JSON.parse(env.WORKER_RSA_PRIVATE);
+			// Change alg for signing — import as RSASSA-PKCS1-v1_5
+			const signJwk = { ...workerPrivJwk, alg: 'RS256' };
+			delete signJwk.key_ops;
+			const workerSignKey = await crypto.subtle.importKey(
+				'jwk', signJwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
 			);
-			let signature: Uint8Array;
-			try {
-				signature = pgp_sign(encryptedKey, workerSecretKey, env.WORKER_PGP_PASS);
-			} catch (e: any) {
-				return err('pgp sign failed: ' + e.message, 500);
-			}
+			const sigBuf = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', workerSignKey, new Uint8Array(encryptedBuf));
+			const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
 
-			const encB64 = btoa(String.fromCharCode(...encryptedKey));
-			const sigB64 = btoa(String.fromCharCode(...signature));
-
-			return json({
-				encryptedKey: encB64,
-				signature: sigB64,
-				workerFingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC),
-			});
+			return json({ encryptedKey: encB64, signature: sigB64 });
 		}
 
 		return err('not found', 404);

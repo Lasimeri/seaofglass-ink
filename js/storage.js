@@ -122,9 +122,9 @@ export async function load(id) {
 
     const sorted = records.sort((a, b) => (a.i || 0) - (b.i || 0));
     const chunks = sorted.map(r => r.d);
-    const meta = sorted.find(r => r.i === 0) || sorted[0];
+    const meta = sorted.find(r => r.i === 0) || sorted[0] || {};
 
-    if (meta.mr) {
+    if (meta && meta.mr) {
       const valid = await verifyMerkleRoot(chunks, meta.mr);
       if (!valid) throw new Error('merkle root verification failed — data corrupted');
     }

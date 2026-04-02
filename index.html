@@ -32,7 +32,9 @@
         <summary>how it works</summary>
         <div class="how-content">
           <p><strong>link-only</strong> — AES-256-GCM encrypted. key lives in the URL fragment, never sent to any server.</p>
-          <p><strong>password</strong> — encrypted with your password via PBKDF2 (100k iterations). no key in the URL.</p>
+          <p><strong>password</strong> — Argon2id + AES-256-GCM. encrypted with your password. no key in the URL.</p>
+          <p><strong>burn</strong> — same as link-only but the paste self-destructs after first read.</p>
+          <p><strong>deniable</strong> — two passwords, two contents, one ciphertext. give up the decoy password under coercion. no way to prove the real content exists.</p>
           <p><strong>public</strong> — encrypted at rest but key is stored alongside data. anyone with the link can read.</p>
           <p>pastes are stored as DNS TXT records. the static page is the only way to decrypt them.</p>
         </div>
@@ -46,6 +48,7 @@
             <option value="link">link-only</option>
             <option value="password">password</option>
             <option value="burn">burn after read</option>
+            <option value="deniable">deniable</option>
             <option value="public">public</option>
           </select>
           <select id="expiry-select" title="Paste expiry" aria-label="Paste expiry">
@@ -62,6 +65,17 @@
 
       <div id="password-row" class="password-row hidden">
         <input type="password" id="password-input" placeholder="password" autocomplete="off" aria-label="Encryption password" enterkeyhint="done">
+      </div>
+
+      <div id="deniable-row" class="deniable-row hidden">
+        <div class="deniable-fields">
+          <input type="password" id="real-password" placeholder="real password" autocomplete="off" aria-label="Real password">
+          <input type="password" id="decoy-password" placeholder="decoy password" autocomplete="off" aria-label="Decoy password">
+        </div>
+        <div class="deniable-editor">
+          <label class="deniable-label">decoy content</label>
+          <textarea id="decoy-input" placeholder="decoy content shown with decoy password..." spellcheck="false" aria-label="Decoy content"></textarea>
+        </div>
       </div>
 
       <div class="editor-frame">

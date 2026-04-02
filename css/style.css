@@ -88,6 +88,26 @@ select option { background: var(--surface); color: var(--text); }
 .password-row input:focus { border-color: var(--accent); }
 
 /* ============================================================
+   Deniable mode
+   ============================================================ */
+
+.deniable-row { margin-bottom: 0.75rem; }
+.deniable-fields { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.deniable-fields input {
+  font-family: var(--mono); font-size: 0.7rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 0.4rem 0.6rem;
+  flex: 1; max-width: 250px;
+}
+.deniable-fields input:focus { border-color: var(--accent); }
+.deniable-label { font-size: 0.6rem; color: var(--text-dim); margin-bottom: 0.3rem; display: block; }
+.deniable-editor textarea {
+  width: 100%; min-height: 120px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); padding: 0.75rem; font-family: var(--mono);
+  font-size: 0.8rem; resize: vertical; line-height: 1.5;
+}
+
+/* ============================================================
    Editor
    ============================================================ */
 

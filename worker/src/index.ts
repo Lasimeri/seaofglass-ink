@@ -246,7 +246,7 @@ export default {
 
 			const { data, title, mode, key: publicKey, h: encryptedH, expiry, p: pgpKey } = body;
 			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
-			if (!['link', 'password', 'public', 'burn'].includes(mode)) return err('invalid mode');
+			if (!['link', 'password', 'public', 'burn', 'deniable'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
 			const id = crypto.randomUUID().slice(0, 12);

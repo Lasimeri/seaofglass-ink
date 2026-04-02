@@ -1,6 +1,7 @@
 import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
+  encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
 } from './crypto.js?v=10';
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=10';
@@ -238,8 +239,11 @@ if (route.mode === 'create') {
   const createBtn = $('#create-btn');
   let sizeDebounce = null;
 
+  const deniableRow = $('#deniable-row');
   modeSelect.addEventListener('change', () => {
-    passwordRow.classList.toggle('hidden', modeSelect.value !== 'password');
+    const v = modeSelect.value;
+    passwordRow.classList.toggle('hidden', v !== 'password');
+    deniableRow.classList.toggle('hidden', v !== 'deniable');
   });
 
   editor.addEventListener('input', () => {
@@ -389,6 +393,42 @@ if (route.mode === 'create') {
           // PGP WASM not loaded — fall back to direct encryption
           data = await encryptWithPassword(text, passwordInput.value);
         }
+      } else if (mode === 'deniable') {
+        // Deniable mode — two passwords, two payloads, one ciphertext
+        // Pipeline: plaintext → PGP encrypt → base64 → encryptDeniable (brotli + Argon2id + AES-GCM)
+        const realPw = $('#real-password').value;
+        const decoyPw = $('#decoy-password').value;
+        const decoyText = $('#decoy-input').value.trim();
+        if (!realPw || !decoyPw) return log('both passwords required', true);
+        if (!decoyText) return log('decoy content required', true);
+        if (realPw === decoyPw) return log('passwords must be different', true);
+
+        let realPayload = text;
+        let decoyPayload = decoyText;
+        try {
+          log('generating pgp keypairs...');
+          const [realKeys, decoyKeys] = await Promise.all([
+            pgpKeygen('ink-real', 'real@seaofglass.ink', realPw),
+            pgpKeygen('ink-decoy', 'decoy@seaofglass.ink', decoyPw),
+          ]);
+          const [realPgp, decoyPgp] = await Promise.all([
+            pgpEncrypt(text, realKeys.public),
+            pgpEncrypt(decoyText, decoyKeys.public),
+          ]);
+          realPayload = btoa(String.fromCharCode(...realPgp));
+          decoyPayload = btoa(String.fromCharCode(...decoyPgp));
+          // Store both public keys encrypted with their respective passwords
+          // (PGP public keys needed for hash display — stored in 'p' field as JSON)
+          const encRealPub = await encryptRawWithPassword(realKeys.public, realPw);
+          const encDecoyPub = await encryptRawWithPassword(decoyKeys.public, decoyPw);
+          encryptedPubKey = JSON.stringify({ r: encRealPub, d: encDecoyPub });
+        } catch {
+          log('pgp unavailable, using direct encryption...');
+          // Fallback: no PGP layer, raw text into deniable container
+        }
+
+        log('encrypting deniable container...');
+        data = await encryptDeniable(realPayload, realPw, decoyPayload, decoyPw);
       } else if (mode !== 'public') {
         // link / burn modes — generate PGP keypair, encrypt content with PGP, then with AES key
         key = await generateKey();
@@ -413,8 +453,9 @@ if (route.mode === 'create') {
 
       log('storing in dns...');
       let title = titleInput.value.trim() || null;
-      if (title && mode === 'password') {
-        title = await encryptWithPassword(title, passwordInput.value);
+      if (title && (mode === 'password' || mode === 'deniable')) {
+        const pw = mode === 'deniable' ? $('#real-password').value : passwordInput.value;
+        title = await encryptWithPassword(title, pw);
       } else if (title && (mode === 'link' || mode === 'burn') && key) {
         title = await encrypt(title, key);
       }
@@ -423,8 +464,9 @@ if (route.mode === 'create') {
       const deleteToken = crypto.randomUUID();
       const deleteHash = await sha256hex(deleteToken);
       let encryptedH;
-      if (mode === 'password') {
-        encryptedH = await encryptRawWithPassword(deleteHash, passwordInput.value);
+      if (mode === 'password' || mode === 'deniable') {
+        const pw = mode === 'deniable' ? $('#real-password').value : passwordInput.value;
+        encryptedH = await encryptRawWithPassword(deleteHash, pw);
       } else if (key) {
         encryptedH = await encryptRaw(deleteHash, key);
       } else {
@@ -436,7 +478,7 @@ if (route.mode === 'create') {
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
-      if (mode === 'password') {
+      if (mode === 'password' || mode === 'deniable') {
         adminUrl = `${location.origin}/#ap:${result.id}:${deleteToken}`;
       } else {
         adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${deleteToken}`;
@@ -444,7 +486,7 @@ if (route.mode === 'create') {
 
       // Save to local paste history (reader URL, not admin URL)
       let readerUrl;
-      if (mode === 'password') {
+      if (mode === 'password' || mode === 'deniable') {
         readerUrl = `${location.origin}/#p:${result.id}`;
       } else {
         readerUrl = `${location.origin}/#${result.id}:${keyStr}`;
@@ -583,7 +625,9 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         adminPromptBtn.disabled = true;
         adminPromptError.classList.add('hidden');
         try {
-          const text = await decryptWithPassword(record.d, pw);
+          const text = record.m === 'deniable'
+            ? await decryptDeniable(record.d, pw)
+            : await decryptWithPassword(record.d, pw);
           if (record.t) {
             try { adminTitle.textContent = await decryptWithPassword(record.t, pw); }
             catch { adminTitle.textContent = record.t; }
@@ -835,7 +879,9 @@ if (route.mode === 'password') {
       promptBtn.disabled = true;
       promptError.classList.add('hidden');
       try {
-        const text = await decryptWithPassword(record.d, pw);
+        const text = record.m === 'deniable'
+          ? await decryptDeniable(record.d, pw)
+          : await decryptWithPassword(record.d, pw);
         let decTitle = null;
         if (record.t) {
           try { decTitle = await decryptWithPassword(record.t, pw); }

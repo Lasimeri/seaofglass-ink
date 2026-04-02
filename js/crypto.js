@@ -130,6 +130,90 @@ async function deriveKeyPBKDF2(password, salt) {
   );
 }
 
+// --- Deniable encryption (plausible deniability) ---
+// Pipeline per payload: data (already PGP-encrypted by caller) → brotli compress → AES-GCM (Argon2id)
+// Container: [0xDE][16 salt_r][16 salt_d][4-BE real_ct_len][12 iv_r][real_ct][12 iv_d][decoy_ct][random_pad]
+// Fixed container size. Both Argon2id derivations always run (constant time).
+// Caller handles PGP encryption before calling these functions.
+
+const DENIABLE_CONTAINER = 2048;
+const DENIABLE_OVERHEAD = 1 + 16 + 16 + 4 + 12 + 12; // 61 bytes
+
+export async function encryptDeniable(realData, realPassword, decoyData, decoyPassword) {
+  // realData / decoyData are strings (PGP-encrypted + base64 from caller, or raw text)
+  const realBytes = await compress(new TextEncoder().encode(realData));
+  const decoyBytes = await compress(new TextEncoder().encode(decoyData));
+
+  const saltR = crypto.getRandomValues(new Uint8Array(16));
+  const saltD = crypto.getRandomValues(new Uint8Array(16));
+  const ivR = crypto.getRandomValues(new Uint8Array(12));
+  const ivD = crypto.getRandomValues(new Uint8Array(12));
+
+  const keyR = await deriveKeyArgon2(realPassword, saltR);
+  const keyD = await deriveKeyArgon2(decoyPassword, saltD);
+
+  const realCt = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivR }, keyR, realBytes));
+  const decoyCt = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivD }, keyD, decoyBytes));
+
+  const payloadSize = DENIABLE_OVERHEAD + realCt.length + decoyCt.length;
+  if (payloadSize > DENIABLE_CONTAINER) {
+    throw new Error(`content too large for deniable container (${payloadSize} > ${DENIABLE_CONTAINER})`);
+  }
+
+  const buf = new Uint8Array(DENIABLE_CONTAINER);
+  crypto.getRandomValues(buf); // unused bytes are random — indistinguishable from ciphertext
+  let p = 0;
+  buf[p++] = 0xDE;
+  buf.set(saltR, p); p += 16;
+  buf.set(saltD, p); p += 16;
+  buf[p++] = (realCt.length >> 24) & 0xff;
+  buf[p++] = (realCt.length >> 16) & 0xff;
+  buf[p++] = (realCt.length >> 8) & 0xff;
+  buf[p++] = realCt.length & 0xff;
+  buf.set(ivR, p); p += 12;
+  buf.set(realCt, p); p += realCt.length;
+  buf.set(ivD, p); p += 12;
+  buf.set(decoyCt, p);
+
+  return base64url(buf);
+}
+
+export async function decryptDeniable(encoded, password) {
+  const buf = unbase64url(encoded);
+  if (buf.length < DENIABLE_OVERHEAD || buf[0] !== 0xDE) {
+    throw new Error('not a deniable container');
+  }
+
+  let p = 1;
+  const saltR = buf.slice(p, p + 16); p += 16;
+  const saltD = buf.slice(p, p + 16); p += 16;
+  const realCtLen = (buf[p] << 24) | (buf[p+1] << 16) | (buf[p+2] << 8) | buf[p+3]; p += 4;
+  const ivR = buf.slice(p, p + 12); p += 12;
+  const realCt = buf.slice(p, p + realCtLen); p += realCtLen;
+  const ivD = buf.slice(p, p + 12); p += 12;
+  const decoyCt = buf.slice(p);
+
+  // Always derive BOTH keys — constant time prevents timing attacks
+  const [keyR, keyD] = await Promise.all([
+    deriveKeyArgon2(password, saltR),
+    deriveKeyArgon2(password, saltD),
+  ]);
+
+  // Try real payload
+  try {
+    const decrypted = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivR }, keyR, realCt));
+    return new TextDecoder().decode(await decompress(decrypted));
+  } catch { /* wrong key — try decoy */ }
+
+  // Try decoy payload
+  try {
+    const decrypted = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivD }, keyD, decoyCt));
+    return new TextDecoder().decode(await decompress(decrypted));
+  } catch {
+    throw new Error('invalid password');
+  }
+}
+
 // --- Size padding (anonymization) ---
 
 /** Pad compressed data to next 256-byte boundary to prevent size correlation.

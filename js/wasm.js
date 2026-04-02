@@ -92,10 +92,17 @@ async function initPgp() {
   return pgpPromise;
 }
 
-export async function pgpKeygen(name, email, passphrase) {
-  const mod = await initPgp();
-  const json = mod.pgp_keygen(name, email, passphrase);
-  return JSON.parse(json);
+export function pgpKeygen(name, email, passphrase, onProgress) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./pgp-worker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = (e) => {
+      if (e.data.type === 'progress' && onProgress) onProgress(e.data.phase);
+      if (e.data.type === 'result') { worker.terminate(); resolve(e.data.result); }
+      if (e.data.type === 'error') { worker.terminate(); reject(new Error(e.data.error)); }
+    };
+    worker.onerror = (e) => { worker.terminate(); reject(new Error(e.message)); };
+    worker.postMessage({ type: 'keygen', name, email, passphrase });
+  });
 }
 
 export async function pgpEncrypt(data, armoredPublicKey) {

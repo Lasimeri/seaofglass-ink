@@ -158,6 +158,29 @@ async function showHashes(prefix, text, record, decryptFn) {
   hashBar.classList.remove('hidden');
 }
 
+// PGP keygen progress overlay
+let pgpOverlay = null;
+let pgpTimer = null;
+function showPgpProgress(phase) {
+  if (!pgpOverlay) {
+    pgpOverlay = document.createElement('div');
+    pgpOverlay.className = 'pgp-overlay';
+    pgpOverlay.innerHTML = '<div class="pgp-progress"><div class="pgp-phase"></div><div class="pgp-elapsed"></div></div>';
+    document.body.appendChild(pgpOverlay);
+    const start = Date.now();
+    pgpTimer = setInterval(() => {
+      const el = pgpOverlay?.querySelector('.pgp-elapsed');
+      if (el) el.textContent = ((Date.now() - start) / 1000).toFixed(1) + 's';
+    }, 100);
+  }
+  const phaseEl = pgpOverlay.querySelector('.pgp-phase');
+  if (phaseEl) phaseEl.textContent = phase;
+}
+function hidePgpProgress() {
+  if (pgpTimer) { clearInterval(pgpTimer); pgpTimer = null; }
+  if (pgpOverlay) { pgpOverlay.remove(); pgpOverlay = null; }
+}
+
 function downloadText(text, filename) {
   const blob = new Blob([text], { type: 'text/plain' });
   const a = document.createElement('a');
@@ -383,13 +406,16 @@ if (route.mode === 'create') {
       if (mode === 'password') {
         // Generate PGP keypair, encrypt content with PGP, then encrypt with password
         try {
-          log('generating pgp keypair...');
-          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', passwordInput.value);
+          showPgpProgress('generating pgp keypair...');
+          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', passwordInput.value, showPgpProgress);
+          showPgpProgress('encrypting with pgp...');
           const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
+          hidePgpProgress();
           const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
           data = await encryptWithPassword(pgpText, passwordInput.value);
           encryptedPubKey = await encryptWithPassword(pgpKeys.public, passwordInput.value);
         } catch {
+          hidePgpProgress();
           // PGP WASM not loaded — fall back to direct encryption
           data = await encryptWithPassword(text, passwordInput.value);
         }
@@ -406,11 +432,11 @@ if (route.mode === 'create') {
         let realPayload = text;
         let decoyPayload = decoyText;
         try {
-          log('generating pgp keypairs...');
-          const [realKeys, decoyKeys] = await Promise.all([
-            pgpKeygen('ink-real', 'real@seaofglass.ink', realPw),
-            pgpKeygen('ink-decoy', 'decoy@seaofglass.ink', decoyPw),
-          ]);
+          showPgpProgress('generating real keypair...');
+          const realKeys = await pgpKeygen('ink-real', 'real@seaofglass.ink', realPw, showPgpProgress);
+          showPgpProgress('generating decoy keypair...');
+          const decoyKeys = await pgpKeygen('ink-decoy', 'decoy@seaofglass.ink', decoyPw, showPgpProgress);
+          hidePgpProgress();
           const [realPgp, decoyPgp] = await Promise.all([
             pgpEncrypt(text, realKeys.public),
             pgpEncrypt(decoyText, decoyKeys.public),
@@ -434,13 +460,16 @@ if (route.mode === 'create') {
         key = await generateKey();
         keyStr = await exportKey(key);
         try {
-          log('generating pgp keypair...');
-          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', crypto.randomUUID());
+          showPgpProgress('generating pgp keypair...');
+          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', crypto.randomUUID(), showPgpProgress);
+          showPgpProgress('encrypting with pgp...');
           const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
+          hidePgpProgress();
           const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
           data = await encrypt(pgpText, key);
           encryptedPubKey = await encrypt(pgpKeys.public, key);
         } catch {
+          hidePgpProgress();
           // PGP WASM not loaded — fall back to direct encryption
           data = await encrypt(text, key);
         }

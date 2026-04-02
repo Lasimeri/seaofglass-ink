@@ -286,6 +286,26 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 
 /* ============================================================
+   PGP keygen progress overlay
+   ============================================================ */
+
+.pgp-overlay {
+  position: fixed; inset: 0; background: rgba(10, 10, 15, 0.9);
+  display: flex; align-items: center; justify-content: center; z-index: 200;
+}
+.pgp-progress {
+  text-align: center; font-family: var(--mono);
+}
+.pgp-phase {
+  font-size: 0.8rem; color: var(--accent); margin-bottom: 0.5rem;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.pgp-elapsed {
+  font-size: 2rem; color: var(--text); font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
    Hash bar
    ============================================================ */
 

@@ -1,8 +1,6 @@
 /* @ts-self-types="./ink_pgp.d.ts" */
 
 /**
- * Decrypt a PGP message with an armored secret key and passphrase.
- * Returns decrypted plaintext bytes.
  * @param {Uint8Array} encrypted_data
  * @param {string} armored_secret_key
  * @param {string} passphrase
@@ -34,8 +32,6 @@ export function pgp_decrypt(encrypted_data, armored_secret_key, passphrase) {
 }
 
 /**
- * Encrypt data with an armored PGP public key.
- * Returns binary PGP message.
  * @param {Uint8Array} data
  * @param {string} armored_public_key
  * @returns {Uint8Array}
@@ -64,7 +60,6 @@ export function pgp_encrypt(data, armored_public_key) {
 }
 
 /**
- * Get fingerprint of an armored public key as hex string.
  * @param {string} armored_public_key
  * @returns {string}
  */
@@ -135,8 +130,6 @@ export function pgp_keygen(name, email, passphrase) {
 }
 
 /**
- * Sign data with an armored secret key and passphrase.
- * Returns binary signed message.
  * @param {Uint8Array} data
  * @param {string} armored_secret_key
  * @param {string} passphrase

@@ -2,8 +2,8 @@ import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=3';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=3';
+} from './crypto.js?v=4';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=4';
 import { renderQR } from './qr.js?v=1';
 
 const $ = s => document.querySelector(s);

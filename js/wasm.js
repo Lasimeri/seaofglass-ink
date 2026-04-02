@@ -10,6 +10,8 @@ let coreModule = null;
 let corePromise = null;
 let brotliModule = null;
 let brotliPromise = null;
+let pgpModule = null;
+let pgpPromise = null;
 
 // ─── Core (ink_wasm) — zstd + crypto + search + markdown + ed25519 + shamir ───
 
@@ -69,6 +71,52 @@ export async function zstdCompress(data, level = 3) {
 export async function zstdDecompress(data) {
   const mod = await initCore();
   return mod.zstd_decompress(data);
+}
+
+// ─── PGP (ink_pgp) — brotli-compressed, decompressed via brotli module ───
+
+async function initPgp() {
+  if (pgpModule) return pgpModule;
+  if (pgpPromise) return pgpPromise;
+  pgpPromise = (async () => {
+    const brotli = await initBrotli();
+    const resp = await fetch('./ink_pgp_bg.wasm.br');
+    const compressed = new Uint8Array(await resp.arrayBuffer());
+    const wasmBytes = brotli.brotli_decompress(compressed);
+    const mod = await import('./ink_pgp.js');
+    await mod.default(wasmBytes.buffer);
+    pgpModule = mod;
+    return mod;
+  })();
+  return pgpPromise;
+}
+
+export async function pgpKeygen(name, email, passphrase) {
+  const mod = await initPgp();
+  const json = mod.pgp_keygen(name, email, passphrase);
+  return JSON.parse(json);
+}
+
+export async function pgpEncrypt(data, armoredPublicKey) {
+  const mod = await initPgp();
+  const input = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  return mod.pgp_encrypt(input, armoredPublicKey);
+}
+
+export async function pgpDecrypt(encryptedData, armoredSecretKey, passphrase) {
+  const mod = await initPgp();
+  return mod.pgp_decrypt(encryptedData, armoredSecretKey, passphrase);
+}
+
+export async function pgpSign(data, armoredSecretKey, passphrase) {
+  const mod = await initPgp();
+  const input = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+  return mod.pgp_sign(input, armoredSecretKey, passphrase);
+}
+
+export async function pgpFingerprint(armoredPublicKey) {
+  const mod = await initPgp();
+  return mod.pgp_fingerprint(armoredPublicKey);
 }
 
 // ─── Argon2id ───

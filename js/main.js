@@ -270,7 +270,7 @@ if (route.mode === 'create') {
   const pgpRow = $('#pgp-row');
   const pgpModeSelect = $('#pgp-mode');
   const pgpProvide = $('#pgp-provide');
-  const pgpPrivkeyDisplay = $('#pgp-privkey-display');
+  // pgp-privkey-display removed — private key auto-downloads as file
 
   modeSelect.addEventListener('change', () => {
     const v = modeSelect.value;
@@ -280,20 +280,14 @@ if (route.mode === 'create') {
     // Reset PGP state on mode change
     pgpModeSelect.value = 'none';
     pgpProvide.classList.add('hidden');
-    pgpPrivkeyDisplay.classList.add('hidden');
+    // (private key display removed)
   });
 
   pgpModeSelect.addEventListener('change', () => {
     const v = pgpModeSelect.value;
     pgpProvide.classList.toggle('hidden', v !== 'provide');
     $('#pgp-generate-opts').classList.toggle('hidden', v !== 'generate');
-    pgpPrivkeyDisplay.classList.add('hidden');
-  });
-
-  $('#pgp-copy-privkey').addEventListener('click', () => {
-    navigator.clipboard.writeText($('#pgp-privkey-text').textContent);
-    $('#pgp-copy-privkey').textContent = '\u2713 copied';
-    setTimeout(() => $('#pgp-copy-privkey').textContent = 'copy', 1500);
+    // (private key display removed)
   });
 
   editor.addEventListener('input', () => {
@@ -445,10 +439,18 @@ if (route.mode === 'create') {
           showPgpProgress('generating 4096-bit rsa keypair...');
           const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', pgpPassphrase, showPgpProgress);
           pgpPublicKey = pgpKeys.public;
-          // Display private key ONCE — never stored, never sent
-          $('#pgp-privkey-text').textContent = pgpKeys.secret;
-          pgpPrivkeyDisplay.classList.remove('hidden');
+          // Auto-download private key as file — never displayed, never stored
+          const privBlob = new Blob([pgpKeys.secret], { type: 'text/plain' });
+          const privUrl = URL.createObjectURL(privBlob);
+          const privLink = document.createElement('a');
+          privLink.href = privUrl;
+          privLink.download = 'seaofglass-ink-private-key.asc';
+          privLink.click();
+          URL.revokeObjectURL(privUrl);
+          // Wipe from memory
+          pgpKeys.secret = '';
           hidePgpProgress();
+          log('private key downloaded — save it securely');
         } else if (pgpMode === 'provide') {
           pgpPublicKey = $('#pgp-pubkey-input').value.trim();
           if (!pgpPublicKey) return log('pgp public key required', true);

@@ -6,6 +6,7 @@ import {
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=10';
 import { renderQR } from './qr.js?v=10';
 import { downloadPDF } from './pdf.js?v=10';
+import { fuzzySearch, markdownToHtml } from './wasm.js?v=10';
 
 const $ = s => document.querySelector(s);
 
@@ -641,6 +642,63 @@ if (route.mode === 'read') {
     renderNumberedText(decryptedText, text);
     setupScrollIndicator(decryptedText.closest('.read-frame'));
     setupWrapToggle($('#read-wrap'), decryptedText);
+
+    // Show search for pastes with 10+ lines
+    if (text.split('\n').length >= 10) {
+      const searchBox = $('#read-search');
+      const searchInput = $('#paste-search-input');
+      const searchResults = $('#paste-search-results');
+      searchBox.classList.remove('hidden');
+      let searchDebounce = null;
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(async () => {
+          const q = searchInput.value.trim();
+          if (!q) { searchResults.innerHTML = ''; return; }
+          try {
+            const results = await fuzzySearch(text, q, 20);
+            searchResults.innerHTML = results.map(r =>
+              `<div class="search-result" data-line="${r.line}"><span class="sr-line">${r.line}</span>${esc(r.text.slice(0, 120))}</div>`
+            ).join('');
+            searchResults.querySelectorAll('.search-result').forEach(el => {
+              el.addEventListener('click', () => {
+                const ln = el.dataset.line;
+                const target = decryptedText.querySelector(`.line[data-ln="${ln}"]`);
+                if (target) {
+                  decryptedText.querySelectorAll('.line.highlighted').forEach(l => l.classList.remove('highlighted'));
+                  target.classList.add('highlighted');
+                  target.scrollIntoView({ block: 'center' });
+                }
+              });
+            });
+          } catch { /* WASM not loaded yet */ }
+        }, 300);
+      });
+    }
+
+    // Detect markdown and show toggle
+    if (/^#{1,3}\s|^\*\s|^-\s|^\d+\.\s|```|^\|.*\|/m.test(text)) {
+      const mdBtn = $('#read-md');
+      const mdFrame = $('#read-md-frame');
+      mdBtn.classList.remove('hidden');
+      let mdRendered = false;
+      mdBtn.addEventListener('click', async () => {
+        if (mdFrame.classList.contains('hidden')) {
+          if (!mdRendered) {
+            try {
+              mdFrame.innerHTML = await markdownToHtml(text);
+              mdRendered = true;
+            } catch { mdFrame.innerHTML = '<p>markdown rendering unavailable</p>'; }
+          }
+          mdFrame.classList.remove('hidden');
+          mdBtn.textContent = 'source';
+        } else {
+          mdFrame.classList.add('hidden');
+          mdBtn.textContent = 'markdown';
+        }
+      });
+    }
+
     if (record.m === 'burn') log('this paste has been burned');
     else log('decrypted');
   }).catch(e => {

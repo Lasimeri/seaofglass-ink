@@ -260,6 +260,56 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 
 /* ============================================================
+   Paste search
+   ============================================================ */
+
+.paste-search { margin-top: 0.75rem; }
+.paste-search input {
+  font-family: var(--mono); font-size: 0.7rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 0.4rem 0.6rem;
+  width: 100%; max-width: 400px;
+}
+.paste-search input:focus { border-color: var(--accent); }
+.search-results {
+  max-height: 200px; overflow-y: auto; margin-top: 0.5rem;
+  border: 1px solid var(--border);
+}
+.search-results:empty { display: none; }
+.search-result {
+  padding: 0.3rem 0.6rem; font-size: 0.65rem; color: var(--text-dim);
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.search-result:last-child { border-bottom: none; }
+.search-result:hover { background: var(--surface); }
+.search-result .sr-line { color: var(--accent); margin-right: 0.5rem; }
+
+/* ============================================================
+   Markdown rendered frame
+   ============================================================ */
+
+.md-frame {
+  border: 1px solid var(--border); padding: 1.5rem;
+  max-height: 500px; overflow-y: auto; margin-top: 0.75rem;
+  font-family: var(--mono); font-size: 0.8rem; color: var(--text);
+  line-height: 1.6;
+}
+.md-frame h1, .md-frame h2, .md-frame h3 { color: var(--accent); margin: 1rem 0 0.5rem; }
+.md-frame h1 { font-size: 1.2rem; }
+.md-frame h2 { font-size: 1rem; }
+.md-frame h3 { font-size: 0.9rem; }
+.md-frame p { margin-bottom: 0.75rem; }
+.md-frame code { background: var(--surface); padding: 0.15rem 0.3rem; font-size: 0.75rem; }
+.md-frame pre { background: var(--surface); padding: 0.75rem; overflow-x: auto; margin-bottom: 0.75rem; }
+.md-frame pre code { background: none; padding: 0; }
+.md-frame a { color: var(--accent); }
+.md-frame ul, .md-frame ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+.md-frame table { border-collapse: collapse; margin-bottom: 0.75rem; }
+.md-frame th, .md-frame td { border: 1px solid var(--border); padding: 0.3rem 0.6rem; font-size: 0.7rem; }
+.md-frame th { background: var(--surface); }
+.md-frame blockquote { border-left: 2px solid var(--accent); padding-left: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem; }
+
+/* ============================================================
    Utilities
    ============================================================ */
 

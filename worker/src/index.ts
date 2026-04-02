@@ -402,6 +402,27 @@ export default {
 			return new Response(res.body, { status: res.status, headers });
 		}
 
+		// POST /purge — purge Cloudflare CDN cache for the site (requires CF_API_TOKEN)
+		if (request.method === 'POST' && url.pathname === '/purge') {
+			const ct = request.headers.get('Content-Type');
+			if (!ct || !ct.includes('application/json')) return err('invalid content type');
+			let body: any;
+			try { body = await request.json(); } catch { return err('invalid json'); }
+			// Simple shared secret — set PURGE_SECRET in worker env
+			if (!body.secret || body.secret !== (env as any).PURGE_SECRET) return err('unauthorized', 403);
+
+			const purgeRes = await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/purge_cache`, {
+				method: 'POST',
+				headers: {
+					'Authorization': `Bearer ${env.CF_API_TOKEN}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ purge_everything: true }),
+			});
+			if (!purgeRes.ok) return err('purge failed: ' + purgeRes.status, 500);
+			return json({ purged: true });
+		}
+
 		return err('not found', 404);
 	},
 };

@@ -70,17 +70,59 @@ async function sha256hex(input: string): Promise<string> {
 	return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Base64url decode */
+function unbase64url(str: string): Uint8Array {
+	const s = str.replace(/-/g, '+').replace(/_/g, '/');
+	const pad = s + '='.repeat((4 - s.length % 4) % 4);
+	const binary = atob(pad);
+	const buf = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+	return buf;
+}
+
+/** Decrypt AES-GCM encrypted metadata using a raw base64url key */
+async function decryptRawWithKey(encoded: string, keyStr: string): Promise<string> {
+	const buf = unbase64url(encoded);
+	const iv = buf.slice(0, 12);
+	const ct = buf.slice(12);
+	const key = await crypto.subtle.importKey('raw', unbase64url(keyStr), 'AES-GCM', false, ['decrypt']);
+	const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+	return new TextDecoder().decode(decrypted);
+}
+
+/** Decrypt PBKDF2+AES-GCM encrypted metadata using a password */
+async function decryptRawWithPassword(encoded: string, password: string): Promise<string> {
+	const buf = unbase64url(encoded);
+	const salt = buf.slice(0, 16);
+	const iv = buf.slice(16, 28);
+	const ct = buf.slice(28);
+	const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+	const key = await crypto.subtle.deriveKey(
+		{ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+		material,
+		{ name: 'AES-GCM', length: 256 },
+		false, ['decrypt']
+	);
+	const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+	return new TextDecoder().decode(decrypted);
+}
+
+/** Check if a string looks like a legacy plaintext SHA-256 hex hash */
+function isLegacyHash(h: string): boolean {
+	return h.length === 64 && /^[a-f0-9]{64}$/.test(h);
+}
+
 /**
  * Build TXT record JSON envelope.
- * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=deleteHash
+ * Fields: d=data, t=title, m=mode, c=created, k=publicKey, h=encryptedDeleteHash
  */
-function buildRecord(data: string, title: string | null, mode: string, deleteHash: string, publicKey?: string): string {
+function buildRecord(data: string, title: string | null, mode: string, encryptedH: string | null, publicKey?: string): string {
 	const rec: Record<string, unknown> = {
 		d: data,
 		m: mode,
 		c: Math.floor(Date.now() / 3600000) * 3600,
-		h: deleteHash,
 	};
+	if (encryptedH) rec.h = encryptedH;
 	if (title) rec.t = title;
 	if (publicKey) rec.k = publicKey;
 	return JSON.stringify(rec);
@@ -181,22 +223,21 @@ export default {
 			try { body = await request.json(); }
 			catch { return err('invalid json'); }
 
-			const { data, title, mode, key: publicKey } = body;
+			const { data, title, mode, key: publicKey, h: encryptedH } = body;
 			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
 			if (!['link', 'password', 'public'].includes(mode)) return err('invalid mode');
 			if (title !== undefined && title !== null && typeof title !== 'string') return err('invalid title');
 
 			const id = crypto.randomUUID().slice(0, 12);
-			const deleteToken = crypto.randomUUID();
-			const deleteHash = await sha256hex(deleteToken);
 
-			const record = buildRecord(data, title || null, mode, deleteHash, mode === 'public' ? publicKey : undefined);
+			// Delete hash is client-encrypted — server stores it opaque
+			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined);
 			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
 
 			const ok = await dnsCreate(env, id, record);
 			if (!ok) return err('storage failed', 500);
 
-			return json({ id, deleteToken }, 201);
+			return json({ id }, 201);
 		}
 
 		// DELETE /paste/:id — delete a paste by ID with valid token (in body)
@@ -219,13 +260,25 @@ export default {
 			if (!parsed.h) return err('delete token revoked', 403);
 
 			// Check TTL — token expires DELETE_TTL seconds after paste creation
-			// Timestamp is hour-rounded, so compare with same rounding to preserve the window
 			const now = Math.floor(Date.now() / 3600000) * 3600;
 			if (parsed.c && (now - parsed.c) > DELETE_TTL) return err('delete token expired', 403);
 
-			// Validate delete token against stored hash
+			// Validate delete token — decrypt the client-encrypted hash, then compare
 			const tokenHash = await sha256hex(token);
-			if (parsed.h !== tokenHash) return err('invalid delete token', 403);
+			if (isLegacyHash(parsed.h)) {
+				// Legacy plaintext hash (old pastes / public mode)
+				if (parsed.h !== tokenHash) return err('invalid delete token', 403);
+			} else {
+				// Client-encrypted hash — need key or password to decrypt
+				const { key, password } = deleteBody;
+				let expectedHash: string;
+				try {
+					if (key) expectedHash = await decryptRawWithKey(parsed.h, key);
+					else if (password) expectedHash = await decryptRawWithPassword(parsed.h, password);
+					else return err('missing decryption key', 403);
+				} catch { return err('invalid key', 403); }
+				if (expectedHash !== tokenHash) return err('invalid delete token', 403);
+			}
 
 			for (const rec of records) await dnsDelete(env, rec.id);
 			return json({ deleted: true });
@@ -249,9 +302,20 @@ export default {
 
 			if (!parsed.h) return json({ revoked: true }); // already revoked
 
-			// Validate token before revoking
+			// Validate token before revoking — decrypt if encrypted
 			const tokenHash = await sha256hex(token);
-			if (parsed.h !== tokenHash) return err('invalid token', 403);
+			if (isLegacyHash(parsed.h)) {
+				if (parsed.h !== tokenHash) return err('invalid token', 403);
+			} else {
+				const { key, password } = body;
+				let expectedHash: string;
+				try {
+					if (key) expectedHash = await decryptRawWithKey(parsed.h, key);
+					else if (password) expectedHash = await decryptRawWithPassword(parsed.h, password);
+					else return err('missing decryption key', 403);
+				} catch { return err('invalid key', 403); }
+				if (expectedHash !== tokenHash) return err('invalid token', 403);
+			}
 
 			// Remove hash from record — delete is now permanently disabled
 			delete parsed.h;

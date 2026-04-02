@@ -1,7 +1,7 @@
 import {
   generateKey, exportKey, importKey,
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
-  estimateSizes,
+  estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
 } from './crypto.js?v=3';
 import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=3';
 
@@ -198,14 +198,27 @@ if (route.mode === 'create') {
       } else if (title && mode === 'link' && key) {
         title = await encrypt(title, key);
       }
-      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined);
+
+      // Client-generated delete token — hash encrypted with paste key
+      const deleteToken = crypto.randomUUID();
+      const deleteHash = await sha256hex(deleteToken);
+      let encryptedH;
+      if (mode === 'password') {
+        encryptedH = await encryptRawWithPassword(deleteHash, passwordInput.value);
+      } else if (key) {
+        encryptedH = await encryptRaw(deleteHash, key);
+      } else {
+        encryptedH = deleteHash; // public mode: plaintext hash
+      }
+
+      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH);
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
       if (mode === 'password') {
-        adminUrl = `${location.origin}/#ap:${result.id}:${result.deleteToken}`;
+        adminUrl = `${location.origin}/#ap:${result.id}:${deleteToken}`;
       } else {
-        adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${result.deleteToken}`;
+        adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${deleteToken}`;
       }
 
       if (adminTab) {
@@ -242,6 +255,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   createSection.classList.add('hidden');
   adminSection.classList.remove('hidden');
   history.replaceState(null, '', location.pathname);
+  let adminPassword = null; // stored after password decryption for delete/revoke
 
   const adminTitle = $('#admin-title');
   const adminDate = $('#admin-date');
@@ -315,6 +329,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
             try { adminTitle.textContent = await decryptWithPassword(record.t, pw); }
             catch { adminTitle.textContent = record.t; }
           }
+          adminPassword = pw; // retain for delete/revoke
           adminPasswordPrompt.classList.add('hidden');
           adminText.textContent = text;
           adminContent.classList.remove('hidden');
@@ -361,7 +376,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
     adminDeleteBtn.disabled = true;
     log('deleting...');
     try {
-      await remove(route.id, route.deleteToken);
+      await remove(route.id, route.deleteToken, route.key || null, adminPassword);
       deleted = true;
       log('paste deleted');
       adminContent.classList.add('hidden');
@@ -377,8 +392,10 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   // sendBeacon is reliable during page unload (unlike fetch)
   function revokeToken() {
     if (deleted) return;
-    const body = JSON.stringify({ token: route.deleteToken });
-    navigator.sendBeacon(`${WORKER_URL}/revoke/${route.id}`, new Blob([body], { type: 'application/json' }));
+    const revokeBody = { token: route.deleteToken };
+    if (route.key) revokeBody.key = route.key;
+    if (adminPassword) revokeBody.password = adminPassword;
+    navigator.sendBeacon(`${WORKER_URL}/revoke/${route.id}`, new Blob([JSON.stringify(revokeBody)], { type: 'application/json' }));
   }
 
   window.addEventListener('pagehide', revokeToken);

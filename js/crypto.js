@@ -143,6 +143,39 @@ export async function estimateSizes(plaintext) {
   return { raw: raw.byteLength, compressed: compressed.byteLength, encrypted, encoded };
 }
 
+// --- Delete hash helpers (no compression/padding — for short metadata) ---
+
+export async function sha256hex(input) {
+  const data = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function encryptRaw(plaintext, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)
+  );
+  const out = new Uint8Array(12 + ct.byteLength);
+  out.set(iv);
+  out.set(new Uint8Array(ct), 12);
+  return base64url(out);
+}
+
+export async function encryptRawWithPassword(plaintext, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(password, salt);
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)
+  );
+  const out = new Uint8Array(16 + 12 + ct.byteLength);
+  out.set(salt);
+  out.set(iv, 16);
+  out.set(new Uint8Array(ct), 28);
+  return base64url(out);
+}
+
 // --- Base64url encoding ---
 
 export function base64url(buf) {

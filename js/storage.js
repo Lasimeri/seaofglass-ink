@@ -6,10 +6,11 @@ const DOMAIN = 'seaofglass.ink';
 
 // --- Write operations ---
 
-export async function store(data, title, mode, publicKey) {
+export async function store(data, title, mode, publicKey, encryptedH) {
   const body = { data, mode };
   if (title) body.title = title;
   if (publicKey) body.key = publicKey;
+  if (encryptedH) body.h = encryptedH;
   const res = await fetch(`${WORKER_URL}/store`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -22,11 +23,14 @@ export async function store(data, title, mode, publicKey) {
   return res.json(); // { id, deleteToken }
 }
 
-export async function remove(id, deleteToken) {
+export async function remove(id, deleteToken, key, password) {
+  const body = { token: deleteToken };
+  if (key) body.key = key;
+  if (password) body.password = password;
   const res = await fetch(`${WORKER_URL}/paste/${id}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: deleteToken }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

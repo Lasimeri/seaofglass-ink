@@ -107,7 +107,8 @@ export function generatePDF(text, opts = {}) {
   // Object 4: Info
   const infoContent = ['<< /Producer (seaofglass.ink pdf.js)'];
   if (opts.title) infoContent.push(`/Title (${pdfEscape(opts.title)})`);
-  infoContent.push(`/CreationDate (D:${new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)})`);
+  const dateStr = opts.created || new Date().toISOString();
+  infoContent.push(`/CreationDate (D:${dateStr.replace(/[-:T]/g, '').slice(0, 14)})`);
   infoContent.push('>>');
   const infoId = addObj(infoContent.join(' '));
 

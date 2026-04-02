@@ -267,10 +267,31 @@ if (route.mode === 'create') {
   let sizeDebounce = null;
 
   const deniableRow = $('#deniable-row');
+  const pgpRow = $('#pgp-row');
+  const pgpModeSelect = $('#pgp-mode');
+  const pgpProvide = $('#pgp-provide');
+  const pgpPrivkeyDisplay = $('#pgp-privkey-display');
+
   modeSelect.addEventListener('change', () => {
     const v = modeSelect.value;
     passwordRow.classList.toggle('hidden', v !== 'password');
     deniableRow.classList.toggle('hidden', v !== 'deniable');
+    pgpRow.classList.toggle('hidden', v === 'public');
+    // Reset PGP state on mode change
+    pgpModeSelect.value = 'none';
+    pgpProvide.classList.add('hidden');
+    pgpPrivkeyDisplay.classList.add('hidden');
+  });
+
+  pgpModeSelect.addEventListener('change', () => {
+    pgpProvide.classList.toggle('hidden', pgpModeSelect.value !== 'provide');
+    pgpPrivkeyDisplay.classList.add('hidden');
+  });
+
+  $('#pgp-copy-privkey').addEventListener('click', () => {
+    navigator.clipboard.writeText($('#pgp-privkey-text').textContent);
+    $('#pgp-copy-privkey').textContent = '\u2713 copied';
+    setTimeout(() => $('#pgp-copy-privkey').textContent = 'copy', 1500);
   });
 
   editor.addEventListener('input', () => {
@@ -405,28 +426,48 @@ if (route.mode === 'create') {
     log('encrypting...');
 
     try {
-      let data, keyStr = null, key = null, encryptedPubKey = null;
+      let data, keyStr = null, key = null;
+      const pgpMode = pgpModeSelect.value;
+
+      // PGP layer: encrypt text with PGP public key if requested
+      let contentToEncrypt = text;
+      if (pgpMode !== 'none' && mode !== 'public') {
+        let pgpPublicKey = null;
+
+        if (pgpMode === 'generate') {
+          const passphrase = mode === 'password' ? passwordInput.value : crypto.randomUUID();
+          showPgpProgress('generating 4096-bit rsa keypair...');
+          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', passphrase, showPgpProgress);
+          pgpPublicKey = pgpKeys.public;
+          // Display private key ONCE — never stored, never sent
+          $('#pgp-privkey-text').textContent = pgpKeys.secret;
+          pgpPrivkeyDisplay.classList.remove('hidden');
+          hidePgpProgress();
+        } else if (pgpMode === 'provide') {
+          pgpPublicKey = $('#pgp-pubkey-input').value.trim();
+          if (!pgpPublicKey) return log('pgp public key required', true);
+        }
+
+        if (pgpPublicKey) {
+          try {
+            showPgpProgress('encrypting with pgp...');
+            const pgpCiphertext = await pgpEncrypt(text, pgpPublicKey);
+            hidePgpProgress();
+            const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
+            contentToEncrypt = pgpText + '\n---INK-PUBKEY---\n' + pgpPublicKey;
+          } catch (pgpErr) {
+            hidePgpProgress();
+            log('pgp encryption failed: ' + pgpErr.message, true);
+            return;
+          }
+        }
+      }
 
       if (mode === 'password') {
-        // Generate PGP keypair, encrypt content with PGP, then encrypt with password
-        try {
-          showPgpProgress('generating pgp keypair...');
-          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', passwordInput.value, showPgpProgress);
-          showPgpProgress('encrypting with pgp...');
-          const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
-          hidePgpProgress();
-          const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
-          // Embed public key in the encrypted blob (avoids separate oversized 'p' field)
-          const combined = pgpText + '\n---INK-PUBKEY---\n' + pgpKeys.public;
-          data = await encryptWithPassword(combined, passwordInput.value);
-        } catch {
-          hidePgpProgress();
-          // PGP WASM not loaded — fall back to direct encryption
-          data = await encryptWithPassword(text, passwordInput.value);
-        }
+        data = await encryptWithPassword(contentToEncrypt, passwordInput.value);
       } else if (mode === 'deniable') {
-        // Deniable mode — two passwords, two payloads, one ciphertext
-        // Pipeline: plaintext → PGP encrypt → base64 → encryptDeniable (brotli + Argon2id + AES-GCM)
+        // Deniable mode — two passwords, two payloads
+        // PGP already applied to real content via contentToEncrypt above
         const realPw = $('#real-password').value;
         const decoyPw = $('#decoy-password').value;
         const decoyText = $('#decoy-input').value.trim();
@@ -434,50 +475,13 @@ if (route.mode === 'create') {
         if (!decoyText) return log('decoy content required', true);
         if (realPw === decoyPw) return log('passwords must be different', true);
 
-        let realPayload = text;
-        let decoyPayload = decoyText;
-        try {
-          showPgpProgress('generating real keypair...');
-          const realKeys = await pgpKeygen('ink-real', 'real@seaofglass.ink', realPw, showPgpProgress);
-          showPgpProgress('generating decoy keypair...');
-          const decoyKeys = await pgpKeygen('ink-decoy', 'decoy@seaofglass.ink', decoyPw, showPgpProgress);
-          hidePgpProgress();
-          const [realPgp, decoyPgp] = await Promise.all([
-            pgpEncrypt(text, realKeys.public),
-            pgpEncrypt(decoyText, decoyKeys.public),
-          ]);
-          realPayload = btoa(String.fromCharCode(...realPgp));
-          decoyPayload = btoa(String.fromCharCode(...decoyPgp));
-          // Store both public keys encrypted with their respective passwords
-          // (PGP public keys needed for hash display — stored in 'p' field as JSON)
-          const encRealPub = await encryptRawWithPassword(realKeys.public, realPw);
-          const encDecoyPub = await encryptRawWithPassword(decoyKeys.public, decoyPw);
-          encryptedPubKey = JSON.stringify({ r: encRealPub, d: encDecoyPub });
-        } catch {
-          log('pgp unavailable, using direct encryption...');
-          // Fallback: no PGP layer, raw text into deniable container
-        }
-
         log('encrypting deniable container...');
-        data = await encryptDeniable(realPayload, realPw, decoyPayload, decoyPw);
+        data = await encryptDeniable(contentToEncrypt, realPw, decoyText, decoyPw);
       } else if (mode !== 'public') {
-        // link / burn modes — generate PGP keypair, encrypt content with PGP, then with AES key
+        // link / burn modes
         key = await generateKey();
         keyStr = await exportKey(key);
-        try {
-          showPgpProgress('generating pgp keypair...');
-          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', crypto.randomUUID(), showPgpProgress);
-          showPgpProgress('encrypting with pgp...');
-          const pgpCiphertext = await pgpEncrypt(text, pgpKeys.public);
-          hidePgpProgress();
-          const pgpText = btoa(String.fromCharCode(...pgpCiphertext));
-          const combined = pgpText + '\n---INK-PUBKEY---\n' + pgpKeys.public;
-          data = await encrypt(combined, key);
-        } catch {
-          hidePgpProgress();
-          // PGP WASM not loaded — fall back to direct encryption
-          data = await encrypt(text, key);
-        }
+        data = await encrypt(contentToEncrypt, key);
       } else {
         // Public mode — no PGP layer, unchanged
         key = await generateKey();

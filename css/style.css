@@ -108,6 +108,37 @@ select option { background: var(--surface); color: var(--text); }
 }
 
 /* ============================================================
+   PGP options
+   ============================================================ */
+
+.pgp-row { margin-bottom: 0.75rem; }
+.pgp-options select {
+  font-family: var(--mono); font-size: 0.7rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 0.4rem 0.6rem; cursor: pointer;
+}
+.pgp-row textarea {
+  width: 100%; font-family: var(--mono); font-size: 0.65rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 0.5rem;
+  margin-top: 0.5rem; resize: vertical;
+}
+.pgp-privkey {
+  margin-top: 0.5rem; border: 2px solid var(--warn);
+  background: rgba(251, 191, 36, 0.05);
+}
+.pgp-privkey-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--warn);
+}
+.pgp-privkey-label { font-size: 0.6rem; color: var(--warn); font-weight: bold; }
+.pgp-privkey-text {
+  padding: 0.75rem; font-family: var(--mono); font-size: 0.55rem;
+  color: var(--text-dim); white-space: pre-wrap; word-break: break-all;
+  max-height: 200px; overflow-y: auto; user-select: all;
+}
+
+/* ============================================================
    Editor
    ============================================================ */
 

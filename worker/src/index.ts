@@ -1,4 +1,5 @@
 import { argon2id_derive } from '../argon2-wasm/pkg/argon2_worker';
+import { pgp_encrypt, pgp_sign, pgp_fingerprint } from '../pgp-wasm/ink_pgp';
 
 // ─────────────────────────────────────────────
 // Types & Interfaces
@@ -491,6 +492,58 @@ export default {
 			});
 			if (!purgeRes.ok) return err('purge failed: ' + purgeRes.status, 500);
 			return json({ purged: true });
+		}
+
+		// GET /worker-key — return the worker's PGP public key
+		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/worker-key') {
+			return json({ publicKey: env.WORKER_PGP_PUBLIC, fingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC) });
+		}
+
+		// POST /handshake — generate 64-char key, PGP-encrypt to reader's pubkey, sign with worker's key
+		if (request.method === 'POST' && url.pathname === '/handshake') {
+			const ct = request.headers.get('Content-Type');
+			if (!ct || !ct.includes('application/json')) return err('invalid content type');
+
+			let body: any;
+			try { body = await request.json(); } catch { return err('invalid json'); }
+			const readerPubKey = body.publicKey;
+			if (!readerPubKey || typeof readerPubKey !== 'string') return err('missing public key');
+
+			// Generate 64-char random key
+			const keyBytes = new Uint8Array(48); // 48 bytes → 64 chars base64
+			crypto.getRandomValues(keyBytes);
+			const key64 = btoa(String.fromCharCode(...keyBytes)).slice(0, 64);
+
+			// PGP-encrypt the 64-char key to the reader's public key
+			const keyData = new TextEncoder().encode(key64);
+			let encryptedKey: Uint8Array;
+			try {
+				encryptedKey = pgp_encrypt(keyData, readerPubKey);
+			} catch (e: any) {
+				return err('pgp encrypt failed: ' + e.message, 500);
+			}
+
+			// Sign the encrypted blob with the worker's private key
+			// Reassemble worker secret key from two base64 halves
+			const workerSecretKey = new TextDecoder().decode(
+				Uint8Array.from(atob(env.WORKER_PGP_SECRET_1 + env.WORKER_PGP_SECRET_2), c => c.charCodeAt(0))
+			);
+			let signature: Uint8Array;
+			try {
+				signature = pgp_sign(encryptedKey, workerSecretKey, env.WORKER_PGP_PASS);
+			} catch (e: any) {
+				return err('pgp sign failed: ' + e.message, 500);
+			}
+
+			// Base64 encode for transport
+			const encB64 = btoa(String.fromCharCode(...encryptedKey));
+			const sigB64 = btoa(String.fromCharCode(...signature));
+
+			return json({
+				encryptedKey: encB64,
+				signature: sigB64,
+				workerFingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC),
+			});
 		}
 
 		return err('not found', 404);

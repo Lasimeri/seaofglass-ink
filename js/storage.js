@@ -139,6 +139,27 @@ export async function load(id) {
   catch { throw new Error('corrupt paste data'); }
 }
 
+// --- PGP handshake ---
+
+export async function fetchWorkerKey() {
+  const res = await fetch(`${WORKER_URL}/worker-key`);
+  if (!res.ok) throw new Error('failed to fetch worker key');
+  return res.json(); // { publicKey, fingerprint }
+}
+
+export async function handshake(readerPublicKey) {
+  const res = await fetch(`${WORKER_URL}/handshake`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publicKey: readerPublicKey }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `handshake failed: ${res.status}`);
+  }
+  return res.json(); // { encryptedKey, signature, workerFingerprint }
+}
+
 // --- Public directory ---
 
 export async function listPublic() {

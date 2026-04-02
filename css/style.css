@@ -279,13 +279,13 @@ button.danger-btn:hover:not(:disabled) { border-color: var(--error); color: var(
 
 .how-it-works { margin-bottom: 0.75rem; }
 .how-it-works summary {
-  font-size: 0.7rem; color: var(--text-dim); opacity: 0.6;
+  font-size: 0.7rem; color: var(--text-dim); opacity: 0.8;
   cursor: pointer;
 }
-.how-it-works summary:hover { opacity: 1; }
+.how-it-works summary:hover { opacity: 1; color: var(--accent); }
 .how-content { padding: 0.5rem 0; }
 .how-content p {
-  font-size: 0.7rem; color: var(--text-dim); opacity: 0.6;
+  font-size: 0.7rem; color: var(--text-dim); opacity: 0.8;
   margin-bottom: 0.3rem; line-height: 1.5;
 }
 .how-content strong { color: var(--text); opacity: 1; }

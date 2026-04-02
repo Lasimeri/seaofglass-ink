@@ -1,7 +1,7 @@
-// highlight.js — Tree-sitter syntax highlighting with zstd-compressed grammars
-// Loads tree-sitter runtime uncompressed, decompresses grammar WASMs on demand via ink-wasm zstd.
+// highlight.js — Tree-sitter syntax highlighting with brotli-compressed grammars
+// Loads tree-sitter runtime uncompressed, decompresses grammar WASMs on demand via ink-brotli.
 
-import { zstdDecompress } from './wasm.js?v=10';
+import { brotliDecompress } from './wasm.js?v=10';
 
 const SYNTAX_BASE = './syntax/';
 
@@ -89,10 +89,10 @@ async function loadGrammar(lang) {
   await initTreeSitter();
 
   // Fetch compressed grammar
-  const resp = await fetch(SYNTAX_BASE + lang + '.wasm.zst');
+  const resp = await fetch(SYNTAX_BASE + lang + '.wasm.br');
   if (!resp.ok) return null;
   const compressed = new Uint8Array(await resp.arrayBuffer());
-  const wasmBytes = await zstdDecompress(compressed);
+  const wasmBytes = await brotliDecompress(compressed);
 
   const language = await Parser.Language.load(wasmBytes.buffer);
   const parser = new Parser();

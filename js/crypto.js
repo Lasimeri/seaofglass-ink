@@ -339,14 +339,18 @@ export async function encryptRawWithPassword(plaintext, password) {
 // --- Multi-record chunking with Merkle root ---
 
 const CHUNK_COUNT = 4;
-const MAX_CHUNK_DATA = 3400; // leave room for JSON envelope per record
+const MAX_RECORD = 3200; // conservative limit per TXT record (Cloudflare allows ~4KB)
+const CHUNK0_RESERVE = 2000; // reserve space for metadata in chunk 0 (mode, title, hash, PGP key, merkle root)
 
 export function splitIntoChunks(data) {
-  // data is a base64url string — split into CHUNK_COUNT equal parts
-  const chunkSize = Math.ceil(data.length / CHUNK_COUNT);
-  const chunks = [];
-  for (let i = 0; i < CHUNK_COUNT; i++) {
-    chunks.push(data.slice(i * chunkSize, (i + 1) * chunkSize));
+  // Chunk 0 gets less data to leave room for metadata JSON envelope
+  const chunk0DataMax = MAX_RECORD - CHUNK0_RESERVE;
+  const chunk0Data = data.slice(0, chunk0DataMax);
+  const remaining = data.slice(chunk0DataMax);
+  const otherChunkSize = Math.ceil(remaining.length / (CHUNK_COUNT - 1));
+  const chunks = [chunk0Data];
+  for (let i = 0; i < CHUNK_COUNT - 1; i++) {
+    chunks.push(remaining.slice(i * otherChunkSize, (i + 1) * otherChunkSize));
   }
   return chunks;
 }

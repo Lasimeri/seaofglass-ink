@@ -19,7 +19,7 @@ interface Env {
 const CF_API = 'https://api.cloudflare.com/client/v4';
 const DOMAIN = 'seaofglass.ink';
 const ALLOWED_ORIGIN = `https://${DOMAIN}`;
-const MAX_RECORD_LEN = 3500;
+const MAX_RECORD_LEN = 4000; // Cloudflare TXT record limit ~4KB, leave some margin
 const DELETE_TTL = 600; // 10 minutes — delete token expires after this
 
 // Rate limiting (per-isolate, resets on cold start)

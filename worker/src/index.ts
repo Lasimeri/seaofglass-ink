@@ -1,11 +1,8 @@
 import { argon2id_derive } from '../argon2-wasm/pkg/argon2_worker';
-// PGP module lazy-loaded on demand (avoids crashing worker on startup)
-let pgpMod: any = null;
-async function getPgp() {
-	if (pgpMod) return pgpMod;
-	pgpMod = await import('../pgp-wasm/ink_pgp');
-	return pgpMod;
-}
+import { pgp_encrypt, pgp_sign, pgp_fingerprint } from '../pgp-wasm/ink_pgp_bg.js';
+import * as pgpWasm from '../pgp-wasm/ink_pgp_bg.wasm';
+import { __wbg_set_wasm } from '../pgp-wasm/ink_pgp_bg.js';
+__wbg_set_wasm(pgpWasm);
 
 // ─────────────────────────────────────────────
 // Types & Interfaces
@@ -502,8 +499,7 @@ export default {
 
 		// GET /worker-key — return the worker's PGP public key
 		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/worker-key') {
-			const pgp = await getPgp();
-			return json({ publicKey: env.WORKER_PGP_PUBLIC, fingerprint: pgp.pgp_fingerprint(env.WORKER_PGP_PUBLIC) });
+			return json({ publicKey: env.WORKER_PGP_PUBLIC, fingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC) });
 		}
 
 		// POST /handshake — generate 64-char key, PGP-encrypt to reader's pubkey, sign with worker's key
@@ -516,8 +512,6 @@ export default {
 			const readerPubKey = body.publicKey;
 			if (!readerPubKey || typeof readerPubKey !== 'string') return err('missing public key');
 
-			const pgp = await getPgp();
-
 			// Generate 64-char random key
 			const keyBytes = new Uint8Array(48);
 			crypto.getRandomValues(keyBytes);
@@ -527,7 +521,7 @@ export default {
 			const keyData = new TextEncoder().encode(key64);
 			let encryptedKey: Uint8Array;
 			try {
-				encryptedKey = pgp.pgp_encrypt(keyData, readerPubKey);
+				encryptedKey = pgp_encrypt(keyData, readerPubKey);
 			} catch (e: any) {
 				return err('pgp encrypt failed: ' + e.message, 500);
 			}
@@ -538,7 +532,7 @@ export default {
 			);
 			let signature: Uint8Array;
 			try {
-				signature = pgp.pgp_sign(encryptedKey, workerSecretKey, env.WORKER_PGP_PASS);
+				signature = pgp_sign(encryptedKey, workerSecretKey, env.WORKER_PGP_PASS);
 			} catch (e: any) {
 				return err('pgp sign failed: ' + e.message, 500);
 			}
@@ -549,7 +543,7 @@ export default {
 			return json({
 				encryptedKey: encB64,
 				signature: sigB64,
-				workerFingerprint: pgp.pgp_fingerprint(env.WORKER_PGP_PUBLIC),
+				workerFingerprint: pgp_fingerprint(env.WORKER_PGP_PUBLIC),
 			});
 		}
 

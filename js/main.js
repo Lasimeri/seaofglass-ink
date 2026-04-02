@@ -140,18 +140,23 @@ if (route.mode === 'create') {
     log('encrypting...');
 
     try {
-      let data, keyStr = null;
+      let data, keyStr = null, key = null;
 
       if (mode === 'password') {
         data = await encryptWithPassword(text, passwordInput.value);
       } else {
-        const key = await generateKey();
+        key = await generateKey();
         data = await encrypt(text, key);
         keyStr = await exportKey(key);
       }
 
       log('storing in dns...');
-      const title = titleInput.value.trim() || null;
+      let title = titleInput.value.trim() || null;
+      if (title && mode === 'password') {
+        title = await encryptWithPassword(title, passwordInput.value);
+      } else if (title && mode === 'link' && key) {
+        title = await encrypt(title, key);
+      }
       const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined);
 
       // Build admin URL and navigate the pre-opened tab
@@ -210,7 +215,6 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
   log('fetching paste...');
 
   loadDirect(route.id).then(async record => {
-    if (record.t) adminTitle.textContent = record.t;
     if (record.c) adminDate.textContent = fmtDate(record.c);
 
     if (route.mode === 'admin') {
@@ -221,6 +225,10 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
       log('decrypting...');
       try {
         const key = await importKey(route.key);
+        if (record.t) {
+          try { adminTitle.textContent = await decrypt(record.t, key); }
+          catch { adminTitle.textContent = record.t; }
+        }
         const text = await decrypt(record.d, key);
         adminText.textContent = text;
         adminContent.classList.remove('hidden');
@@ -241,6 +249,10 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         adminPromptError.classList.add('hidden');
         try {
           const text = await decryptWithPassword(record.d, pw);
+          if (record.t) {
+            try { adminTitle.textContent = await decryptWithPassword(record.t, pw); }
+            catch { adminTitle.textContent = record.t; }
+          }
           adminPasswordPrompt.classList.add('hidden');
           adminText.textContent = text;
           adminContent.classList.remove('hidden');
@@ -319,10 +331,13 @@ if (route.mode === 'read') {
   log('fetching from dns...');
 
   load(route.id).then(async record => {
-    if (record.t) readTitle.textContent = record.t;
     if (record.c) readDate.textContent = fmtDate(record.c);
     log('decrypting...');
     const key = await importKey(route.key);
+    if (record.t) {
+      try { readTitle.textContent = await decrypt(record.t, key); }
+      catch { readTitle.textContent = record.t; }
+    }
     const text = await decrypt(record.d, key);
     decryptedText.textContent = text;
     log('decrypted');
@@ -359,7 +374,6 @@ if (route.mode === 'password') {
   log('fetching from dns...');
 
   load(route.id).then(record => {
-    if (record.t) promptTitle.textContent = record.t;
     if (record.c) promptDate.textContent = fmtDate(record.c);
     log('enter password to decrypt');
 
@@ -370,9 +384,14 @@ if (route.mode === 'password') {
       promptError.classList.add('hidden');
       try {
         const text = await decryptWithPassword(record.d, pw);
+        let decTitle = null;
+        if (record.t) {
+          try { decTitle = await decryptWithPassword(record.t, pw); }
+          catch { decTitle = record.t; }
+        }
         passwordPrompt.classList.add('hidden');
         readSection.classList.remove('hidden');
-        if (record.t) readTitle.textContent = record.t;
+        if (decTitle) readTitle.textContent = decTitle;
         if (record.c) readDate.textContent = fmtDate(record.c);
         decryptedText.textContent = text;
         log('decrypted');

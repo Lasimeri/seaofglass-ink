@@ -117,6 +117,13 @@ select option { background: var(--surface); color: var(--text); }
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border); padding: 0.4rem 0.6rem; cursor: pointer;
 }
+.pgp-row input[type="password"] {
+  font-family: var(--mono); font-size: 0.7rem;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); padding: 0.4rem 0.6rem;
+  width: 100%; max-width: 300px; margin-top: 0.5rem;
+}
+.pgp-row input[type="password"]:focus { border-color: var(--accent); }
 .pgp-row textarea {
   width: 100%; font-family: var(--mono); font-size: 0.65rem;
   background: var(--surface); color: var(--text);

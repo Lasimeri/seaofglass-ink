@@ -284,7 +284,9 @@ if (route.mode === 'create') {
   });
 
   pgpModeSelect.addEventListener('change', () => {
-    pgpProvide.classList.toggle('hidden', pgpModeSelect.value !== 'provide');
+    const v = pgpModeSelect.value;
+    pgpProvide.classList.toggle('hidden', v !== 'provide');
+    $('#pgp-generate-opts').classList.toggle('hidden', v !== 'generate');
     pgpPrivkeyDisplay.classList.add('hidden');
   });
 
@@ -438,9 +440,10 @@ if (route.mode === 'create') {
         let pgpPublicKey = null;
 
         if (pgpMode === 'generate') {
-          const passphrase = mode === 'password' ? passwordInput.value : crypto.randomUUID();
+          const pgpPassphrase = $('#pgp-keygen-passphrase').value;
+          if (!pgpPassphrase) return log('pgp keypair passphrase required', true);
           showPgpProgress('generating 4096-bit rsa keypair...');
-          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', passphrase, showPgpProgress);
+          const pgpKeys = await pgpKeygen('ink', 'paste@seaofglass.ink', pgpPassphrase, showPgpProgress);
           pgpPublicKey = pgpKeys.public;
           // Display private key ONCE — never stored, never sent
           $('#pgp-privkey-text').textContent = pgpKeys.secret;

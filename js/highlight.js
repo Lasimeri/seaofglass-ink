@@ -3,7 +3,7 @@
 
 import { brotliDecompress } from './wasm.js?v=10';
 
-const SYNTAX_BASE = './syntax/';
+const SYNTAX_BASE = new URL('./syntax/', import.meta.url).href;
 
 let Parser = null;
 let initPromise = null;

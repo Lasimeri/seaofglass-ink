@@ -3,12 +3,12 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=10';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=10';
-import { renderQR } from './qr.js?v=10';
-import { downloadPDF } from './pdf.js?v=10';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpFingerprint } from './wasm.js?v=10';
-import { highlight, detectLanguage } from './highlight.js?v=10';
+} from './crypto.js?v=11';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=11';
+import { renderQR } from './qr.js?v=11';
+import { downloadPDF } from './pdf.js?v=11';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpFingerprint } from './wasm.js?v=11';
+import { highlight, detectLanguage } from './highlight.js?v=11';
 
 const $ = s => document.querySelector(s);
 
@@ -307,7 +307,7 @@ if (route.mode === 'create') {
     const text = editor.value;
     if (!text) {
       sizeRaw.textContent = 'raw: 0 B';
-      sizeCompressed.textContent = 'deflate: 0 B';
+      sizeCompressed.textContent = 'brotli: 0 B';
       sizeEncrypted.textContent = 'aes-gcm: 0 B';
       sizeEncoded.textContent = 'base64: 0 B';
       sizeLimit.textContent = '';
@@ -317,7 +317,7 @@ if (route.mode === 'create') {
     try {
       const s = await estimateSizes(text);
       sizeRaw.textContent = `raw: ${fmt(s.raw)}`;
-      sizeCompressed.textContent = `deflate: ${fmt(s.compressed)}`;
+      sizeCompressed.textContent = `brotli: ${fmt(s.compressed)}`;
       sizeEncrypted.textContent = `aes-gcm: ${fmt(s.encrypted)}`;
       sizeEncoded.textContent = `base64: ${fmt(s.encoded)}`;
       const total = s.encoded + 80;

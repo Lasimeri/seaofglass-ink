@@ -35,7 +35,7 @@ async function initBrotli() {
   brotliPromise = (async () => {
     const core = await initCore();
     // Fetch zstd-compressed brotli WASM
-    const resp = await fetch('./ink_brotli_bg.wasm.zst');
+    const resp = await fetch(new URL('./ink_brotli_bg.wasm.zst', import.meta.url));
     const compressed = new Uint8Array(await resp.arrayBuffer());
     // Decompress with core's zstd
     const wasmBytes = core.zstd_decompress(compressed);
@@ -80,7 +80,7 @@ async function initPgp() {
   if (pgpPromise) return pgpPromise;
   pgpPromise = (async () => {
     const brotli = await initBrotli();
-    const resp = await fetch('./ink_pgp_bg.wasm.br');
+    const resp = await fetch(new URL('./ink_pgp_bg.wasm.br', import.meta.url));
     const compressed = new Uint8Array(await resp.arrayBuffer());
     const wasmBytes = brotli.brotli_decompress(compressed);
     const mod = await import('./ink_pgp.js');

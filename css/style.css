@@ -128,9 +128,15 @@ textarea {
 }
 textarea::placeholder { color: var(--accent-dim); }
 .editor-footer {
-  display: flex; gap: 1rem; padding: 0.4rem 1rem;
+  display: flex; gap: 1rem; padding: 0.4rem 1rem; align-items: center;
   border-top: 1px solid var(--border); font-size: 0.6rem; color: var(--text-dim);
 }
+.footer-btn {
+  margin-left: auto; font-size: 0.55rem; padding: 0.2rem 0.5rem;
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  cursor: pointer; opacity: 0.6;
+}
+.footer-btn:hover { opacity: 1; border-color: var(--accent); color: var(--accent); }
 
 /* ============================================================
    Size calculator bar

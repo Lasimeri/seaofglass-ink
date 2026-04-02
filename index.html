@@ -144,6 +144,16 @@
         <div id="admin-prompt-error" class="error-text hidden"></div>
       </div>
 
+      <div id="admin-pgp-prompt" class="pgp-decrypt-prompt hidden">
+        <p class="decrypt-label">paste is pgp-encrypted — provide your private key to verify</p>
+        <textarea id="admin-pgp-privkey" placeholder="paste your armored PGP private key..." rows="4" aria-label="PGP private key"></textarea>
+        <div class="decrypt-row">
+          <input type="password" id="admin-pgp-passphrase" placeholder="key passphrase" aria-label="PGP passphrase">
+          <button id="admin-pgp-decrypt-btn">decrypt pgp</button>
+        </div>
+        <div id="admin-pgp-error" class="error-text hidden"></div>
+      </div>
+
       <div id="admin-content" class="hidden">
         <div class="read-frame">
           <pre id="admin-text"></pre>

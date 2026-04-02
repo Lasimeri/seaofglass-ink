@@ -636,12 +636,43 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         }
         const rawText = await decrypt(record.d, key);
         const { content: text, pubkey } = extractPubKey(rawText);
-        renderNumberedText(adminText, text);
-        adminContent.classList.remove('hidden');
-        setupScrollIndicator(adminText.closest('.read-frame'));
-        setupWrapToggle($('#admin-wrap'), adminText);
-        showHashes('admin', text, pubkey);
-        log('');
+
+        if (pubkey) {
+          // PGP-encrypted — require private key before showing content
+          const pgpPrompt = $('#admin-pgp-prompt');
+          pgpPrompt.classList.remove('hidden');
+          showHashes('admin', text, pubkey);
+          log('provide your pgp private key to verify the paste');
+          const doAdminPgpDecrypt = async () => {
+            const privKey = $('#admin-pgp-privkey').value.trim();
+            const passphrase = $('#admin-pgp-passphrase').value;
+            if (!privKey) return;
+            try {
+              const pgpBinary = Uint8Array.from(atob(text), c => c.charCodeAt(0));
+              const plaintext = await pgpDecrypt(pgpBinary, privKey, passphrase);
+              const decoded = new TextDecoder().decode(plaintext);
+              pgpPrompt.classList.add('hidden');
+              renderNumberedText(adminText, decoded);
+              adminContent.classList.remove('hidden');
+              setupScrollIndicator(adminText.closest('.read-frame'));
+              setupWrapToggle($('#admin-wrap'), adminText);
+              showHashes('admin', decoded, pubkey);
+              log('');
+            } catch (e) {
+              $('#admin-pgp-error').textContent = '\u2715 ' + e.message;
+              $('#admin-pgp-error').classList.remove('hidden');
+            }
+          };
+          $('#admin-pgp-decrypt-btn').addEventListener('click', doAdminPgpDecrypt);
+          $('#admin-pgp-passphrase').addEventListener('keydown', e => { if (e.key === 'Enter') doAdminPgpDecrypt(); });
+        } else {
+          renderNumberedText(adminText, text);
+          adminContent.classList.remove('hidden');
+          setupScrollIndicator(adminText.closest('.read-frame'));
+          setupWrapToggle($('#admin-wrap'), adminText);
+          showHashes('admin', text, pubkey);
+          log('');
+        }
       } catch (e) {
         log(e.message, true);
       }
@@ -677,12 +708,43 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
           }
           adminPassword = pw; // retain for delete/revoke
           adminPasswordPrompt.classList.add('hidden');
-          renderNumberedText(adminText, adminDecText);
-          adminContent.classList.remove('hidden');
-          setupScrollIndicator(adminText.closest('.read-frame'));
-          setupWrapToggle($('#admin-wrap'), adminText);
-          showHashes('admin', adminDecText, adminPubkey);
-          log('');
+
+          if (adminPubkey) {
+            // PGP-encrypted — require private key
+            const pgpPrompt = $('#admin-pgp-prompt');
+            pgpPrompt.classList.remove('hidden');
+            showHashes('admin', adminDecText, adminPubkey);
+            log('provide your pgp private key to verify');
+            const doAdminPwPgp = async () => {
+              const privKey = $('#admin-pgp-privkey').value.trim();
+              const passphrase = $('#admin-pgp-passphrase').value;
+              if (!privKey) return;
+              try {
+                const pgpBinary = Uint8Array.from(atob(adminDecText), c => c.charCodeAt(0));
+                const plaintext = await pgpDecrypt(pgpBinary, privKey, passphrase);
+                const decoded = new TextDecoder().decode(plaintext);
+                pgpPrompt.classList.add('hidden');
+                renderNumberedText(adminText, decoded);
+                adminContent.classList.remove('hidden');
+                setupScrollIndicator(adminText.closest('.read-frame'));
+                setupWrapToggle($('#admin-wrap'), adminText);
+                showHashes('admin', decoded, adminPubkey);
+                log('');
+              } catch (e) {
+                $('#admin-pgp-error').textContent = '\u2715 ' + e.message;
+                $('#admin-pgp-error').classList.remove('hidden');
+              }
+            };
+            $('#admin-pgp-decrypt-btn').onclick = doAdminPwPgp;
+            $('#admin-pgp-passphrase').onkeydown = e => { if (e.key === 'Enter') doAdminPwPgp(); };
+          } else {
+            renderNumberedText(adminText, adminDecText);
+            adminContent.classList.remove('hidden');
+            setupScrollIndicator(adminText.closest('.read-frame'));
+            setupWrapToggle($('#admin-wrap'), adminText);
+            showHashes('admin', adminDecText, adminPubkey);
+            log('');
+          }
         } catch {
           adminPromptError.textContent = '\u2715 wrong password';
           adminPromptError.classList.remove('hidden');

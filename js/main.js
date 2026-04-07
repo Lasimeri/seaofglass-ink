@@ -3,12 +3,12 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=12';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=12';
-import { renderQR } from './qr.js?v=12';
-import { downloadPDF } from './pdf.js?v=12';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=12';
-import { highlight, detectLanguage } from './highlight.js?v=12';
+} from './crypto.js?v=13';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=13';
+import { renderQR } from './qr.js?v=13';
+import { downloadPDF } from './pdf.js?v=13';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=13';
+import { highlight, detectLanguage } from './highlight.js?v=13';
 
 const $ = s => document.querySelector(s);
 
@@ -365,7 +365,9 @@ if (route.mode === 'create') {
       sizeEncrypted.textContent = `aes-gcm: ${fmt(s.encrypted)}`;
       sizeEncoded.textContent = `base64: ${fmt(s.encoded)}`;
       const total = s.encoded + 80;
-      const pct = Math.min(100, Math.round(total / 3500 * 100));
+      // 8 chunks: chunk 0 = 1200 data + 2000 meta, chunks 1-7 = 3200 each → ~23600 usable
+      const limit = 23600;
+      const pct = Math.min(100, Math.round(total / limit * 100));
       sizeLimit.textContent = `${pct}% of limit`;
       sizeLimit.className = 'size-limit' + (pct > 95 ? ' danger' : pct > 75 ? ' warn' : '');
     } catch { /* ignore */ }
@@ -418,7 +420,8 @@ if (route.mode === 'create') {
     // Show waiting message until paste is stored
     const adminTab = window.open('about:blank', '_blank');
     if (adminTab) {
-      adminTab.document.write('<html><body style="background:#0a0a0f;color:#c4945a;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><p>encrypting and storing paste...</p><p style="font-size:0.7em;opacity:0.5">this tab will update automatically</p></div></body></html>');
+      adminTab.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>ink — encrypting...</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0f;color:#c4945a;font-family:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;display:flex;align-items:center;justify-content:center;height:100vh}.wrap{text-align:center}.title{font-size:1.1rem;margin-bottom:0.5rem;letter-spacing:0.05em}.sub{font-size:0.7rem;opacity:0.5}.spinner{margin:1.5rem auto 0;width:24px;height:24px;border:2px solid #1e1e2e;border-top-color:#c4945a;border-radius:50%;animation:spin 0.8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}</style></head><body><div class="wrap"><p class="title">encrypting and storing paste...</p><p class="sub">this tab will update automatically</p><div class="spinner"></div></div></body></html>`);
+      adminTab.document.close();
     }
 
     createBtn.disabled = true;

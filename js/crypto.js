@@ -3,7 +3,7 @@
 // Compression UNDER encryption so ciphertext is smaller
 // Backward compat: decompress auto-detects brotli (BR prefix) vs zstd (magic) vs deflate
 
-import { brotliCompress, brotliDecompress, zstdDecompress, argon2idDerive } from './wasm.js?v=12';
+import { brotliCompress, brotliDecompress, zstdDecompress, argon2idDerive } from './wasm.js?v=13';
 
 const BROTLI_MAGIC = [0x42, 0x52]; // "BR" prefix for brotli-compressed data
 const ARGON2_MAGIC = [0x49, 0x4E, 0x4B, 0x31]; // "INK1"
@@ -338,7 +338,7 @@ export async function encryptRawWithPassword(plaintext, password) {
 
 // --- Multi-record chunking with Merkle root ---
 
-const CHUNK_COUNT = 4;
+const CHUNK_COUNT = 8;
 const MAX_RECORD = 3200; // conservative limit per TXT record (Cloudflare allows ~4KB)
 const CHUNK0_RESERVE = 2000; // reserve space for metadata in chunk 0 (mode, title, hash, PGP key, merkle root)
 
@@ -362,7 +362,7 @@ export function reassembleChunks(chunks) {
 
 export async function computeMerkleRoot(chunks) {
   // SHA-256 each chunk, then pairwise hash up to root
-  // For 4 chunks: root = H(H(c0||c1) || H(c2||c3))
+  // For 8 chunks: root = H(H(H(c0||c1)||H(c2||c3)) || H(H(c4||c5)||H(c6||c7)))
   const leaves = await Promise.all(chunks.map(c => sha256hex(c)));
 
   // Pad to power of 2 (already 4, which is 2^2)

@@ -2,7 +2,7 @@
 // R2: single JSON object per paste, read/write via worker API
 // DNS: 4-chunk v2 format for expiring pastes, read via DoH or worker API
 
-import { splitIntoChunks, reassembleChunks, computeMerkleRoot, verifyMerkleRoot } from './crypto.js?v=16';
+import { splitIntoChunks, reassembleChunks, computeMerkleRoot, verifyMerkleRoot } from './crypto.js?v=17';
 
 export const WORKER_URL = 'https://sea-ink.seaofglass.workers.dev';
 const DOH_URL = 'https://cloudflare-dns.com/dns-query';
@@ -10,9 +10,10 @@ const DOMAIN = 'seaofglass.ink';
 
 // --- Write ---
 
-export async function store(data, title, mode, publicKey, encryptedH, expiry) {
+export async function store(data, title, mode, publicKey, encryptedH, expiry, plainTitle) {
   const body = { data, mode };
   if (title) body.title = title;
+  if (plainTitle) body.plainTitle = plainTitle;
   if (publicKey) body.key = publicKey;
   if (encryptedH) body.h = encryptedH;
 

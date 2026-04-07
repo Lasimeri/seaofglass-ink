@@ -3,12 +3,12 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=16';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=16a';
-import { renderQR } from './qr.js?v=16';
-import { downloadPDF } from './pdf.js?v=16';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=16';
-import { highlight, detectLanguage } from './highlight.js?v=16';
+} from './crypto.js?v=17';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=17';
+import { renderQR } from './qr.js?v=17';
+import { downloadPDF } from './pdf.js?v=17';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=17';
+import { highlight, detectLanguage } from './highlight.js?v=17';
 
 const $ = s => document.querySelector(s);
 
@@ -509,8 +509,9 @@ if (route.mode === 'create') {
         keyStr = await exportKey(key);
       }
 
-      log('storing in dns...');
+      log('storing...');
       let title = titleInput.value.trim() || null;
+      const rawTitle = title; // preserve plaintext for embed metadata
       if (title && (mode === 'password' || mode === 'deniable')) {
         const pw = mode === 'deniable' ? $('#real-password').value : passwordInput.value;
         title = await encryptWithPassword(title, pw);
@@ -531,8 +532,12 @@ if (route.mode === 'create') {
         encryptedH = deleteHash; // public mode: plaintext hash
       }
 
+      // Send plaintext title for embed previews (non-password, non-PGP only)
+      const isEmbeddable = pgpMode === 'none' && mode !== 'password' && mode !== 'deniable';
+      const plainTitle = isEmbeddable ? rawTitle : null;
+
       const expiry = parseInt($('#expiry-select').value) || 0;
-      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry);
+      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry, plainTitle);
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
@@ -542,10 +547,12 @@ if (route.mode === 'create') {
         adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${deleteToken}`;
       }
 
-      // Save to local paste history (reader URL, not admin URL)
+      // Build share URL — embed URL for eligible pastes (provides OG tags for link previews)
       let readerUrl;
       if (mode === 'password' || mode === 'deniable') {
         readerUrl = `${location.origin}/#p:${result.id}`;
+      } else if (isEmbeddable && result.storage === 'r2') {
+        readerUrl = `${WORKER_URL}/embed/${result.id}/${keyStr}`;
       } else {
         readerUrl = `${location.origin}/#${result.id}:${keyStr}`;
       }

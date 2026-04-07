@@ -158,7 +158,7 @@ function buildRecord(data: string, title: string | null, mode: string, encrypted
 // ─────────────────────────────────────────────
 
 /** Create a TXT record under <id>.d.seaofglass.ink */
-async function dnsCreate(env: Env, name: string, content: string): Promise<boolean> {
+async function dnsCreate(env: Env, name: string, content: string): Promise<{ ok: boolean; error?: string }> {
 	const res = await fetch(`${CF_API}/zones/${env.CF_ZONE_ID}/dns_records`, {
 		method: 'POST',
 		headers: {
@@ -167,7 +167,12 @@ async function dnsCreate(env: Env, name: string, content: string): Promise<boole
 		},
 		body: JSON.stringify({ type: 'TXT', name: `${name}.d.${DOMAIN}`, content, ttl: 1 }),
 	});
-	return res.ok;
+	if (!res.ok) {
+		const body: any = await res.json().catch(() => ({}));
+		const msg = body?.errors?.[0]?.message || `cf api ${res.status}`;
+		return { ok: false, error: msg };
+	}
+	return { ok: true };
 }
 
 /** Find TXT records for a given paste ID */
@@ -272,8 +277,8 @@ export default {
 					}
 					const content = JSON.stringify(rec);
 					if (content.length > MAX_RECORD_LEN) return err(`chunk ${i} too large (${content.length})`, 413);
-					const ok = await dnsCreate(env, id, content);
-					if (!ok) return err(`chunk ${i} storage failed`, 500);
+					const result = await dnsCreate(env, id, content);
+					if (!result.ok) return err(`chunk ${i} storage failed: ${result.error}`, 500);
 				}
 				return json({ id }, 201);
 			}
@@ -282,8 +287,8 @@ export default {
 			if (!data || typeof data !== 'string' || !data.trim()) return err('missing data');
 			const record = buildRecord(data, title || null, mode, encryptedH || null, mode === 'public' ? publicKey : undefined, expirySeconds, pgpKey || undefined);
 			if (record.length > MAX_RECORD_LEN) return err('paste too large', 413);
-			const ok = await dnsCreate(env, id, record);
-			if (!ok) return err('storage failed', 500);
+			const result = await dnsCreate(env, id, record);
+			if (!result.ok) return err(`storage failed: ${result.error}`, 500);
 			return json({ id }, 201);
 		}
 
@@ -543,6 +548,32 @@ export default {
 			const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
 
 			return json({ encryptedKey: encB64, signature: sigB64 });
+		}
+
+		// GET /stats — diagnostic: count all paste DNS records
+		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/stats') {
+			const records = await dnsListAll(env);
+			const byPaste = new Map<string, number>();
+			for (const rec of records) {
+				const id = rec.name.split('.')[0];
+				byPaste.set(id, (byPaste.get(id) || 0) + 1);
+			}
+			return json({ totalRecords: records.length, pasteCount: byPaste.size, perPaste: Object.fromEntries(byPaste) });
+		}
+
+		// POST /cleanup — delete all records for a specific paste ID (admin only, requires PURGE_SECRET)
+		if (request.method === 'POST' && url.pathname === '/cleanup') {
+			let body: any;
+			try { body = await request.json(); } catch { return err('invalid json'); }
+			if (!body.secret || body.secret !== (env as any).PURGE_SECRET) return err('unauthorized', 403);
+			const ids: string[] = body.ids;
+			if (!ids || !Array.isArray(ids)) return err('missing ids array');
+			let deleted = 0;
+			for (const id of ids) {
+				const records = await dnsFind(env, id);
+				for (const rec of records) { await dnsDelete(env, rec.id); deleted++; }
+			}
+			return json({ deleted });
 		}
 
 		return err('not found', 404);

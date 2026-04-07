@@ -112,13 +112,19 @@ export async function load(id) {
   const dns = await res.json();
   if (!dns.Answer || !dns.Answer.length) throw new Error('paste not found');
 
+  // Parse a DoH TXT record value — handles DNS multi-string format ("part1" "part2")
+  function parseTxtRecord(data) {
+    let raw = data;
+    // DNS TXT records >255 bytes are split into multiple quoted strings: "seg1" "seg2"
+    // Join segments by removing the boundary markers before JSON parsing
+    if (raw.includes('" "')) raw = raw.replace(/" "/g, '');
+    try { raw = JSON.parse(raw); } catch { raw = raw.replace(/^"|"$/g, ''); }
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
   // Multiple TXT records = v2 chunked format
   if (dns.Answer.length > 1) {
-    const records = dns.Answer.map(a => {
-      let raw = a.data;
-      try { raw = JSON.parse(raw); } catch { raw = raw.replace(/^"|"$/g, ''); }
-      try { return JSON.parse(raw); } catch { return null; }
-    }).filter(Boolean);
+    const records = dns.Answer.map(a => parseTxtRecord(a.data)).filter(Boolean);
 
     const sorted = records.sort((a, b) => (a.i || 0) - (b.i || 0));
     const chunks = sorted.map(r => r.d);
@@ -133,10 +139,9 @@ export async function load(id) {
   }
 
   // Single record — v1 or small v2
-  let raw = dns.Answer[0].data;
-  try { raw = JSON.parse(raw); } catch { raw = raw.replace(/^"|"$/g, ''); }
-  try { return JSON.parse(raw); }
-  catch { throw new Error('corrupt paste data'); }
+  const parsed = parseTxtRecord(dns.Answer[0].data);
+  if (!parsed) throw new Error('corrupt paste data');
+  return parsed;
 }
 
 // --- PGP handshake ---

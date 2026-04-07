@@ -91,10 +91,15 @@ function esc(s) {
 function showNotFound(msg) {
   const c = document.querySelector('.container');
   c.querySelectorAll('#create-section,#admin-section,#read-section,#password-prompt').forEach(el => el.classList.add('hidden'));
+  // Hide directory and separator for clean 404 page
+  c.querySelectorAll('.sep,.dir-box').forEach(el => el.classList.add('hidden'));
   const el = document.createElement('div');
   el.className = 'not-found';
   el.innerHTML = `<p>${esc(msg)}</p><a href="/">create a new paste</a>`;
-  c.appendChild(el);
+  // Insert before the separator, not at the end
+  const sep = c.querySelector('.sep');
+  if (sep) c.insertBefore(el, sep);
+  else c.appendChild(el);
 }
 
 function linkify(text) {

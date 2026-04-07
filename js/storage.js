@@ -1,27 +1,29 @@
-// DNS-backed paste storage via Cloudflare Worker + DoH
-// v2: Multi-record chunked storage with Merkle root verification
+// Paste storage: R2 (permanent) + DNS TXT records (expiring)
+// R2: single JSON object per paste, read/write via worker API
+// DNS: 4-chunk v2 format for expiring pastes, read via DoH or worker API
 
-import { splitIntoChunks, reassembleChunks, computeMerkleRoot, verifyMerkleRoot } from './crypto.js?v=14';
+import { splitIntoChunks, reassembleChunks, computeMerkleRoot, verifyMerkleRoot } from './crypto.js?v=15';
 
 export const WORKER_URL = 'https://sea-ink.seaofglass.workers.dev';
 const DOH_URL = 'https://cloudflare-dns.com/dns-query';
 const DOMAIN = 'seaofglass.ink';
 
-// --- Write operations ---
+// --- Write ---
 
 export async function store(data, title, mode, publicKey, encryptedH, expiry) {
-  const chunks = splitIntoChunks(data);
-  const merkleRoot = await computeMerkleRoot(chunks);
-
-  const body = {
-    chunks,
-    merkleRoot,
-    mode,
-  };
+  const body = { data, mode };
   if (title) body.title = title;
   if (publicKey) body.key = publicKey;
   if (encryptedH) body.h = encryptedH;
-  if (expiry) body.expiry = expiry;
+
+  // Expiring pastes go to DNS (4 chunks)
+  if (expiry) {
+    const chunks = splitIntoChunks(data);
+    const merkleRoot = await computeMerkleRoot(chunks);
+    body.chunks = chunks;
+    body.merkleRoot = merkleRoot;
+    body.expiry = expiry;
+  }
 
   const res = await fetch(`${WORKER_URL}/store`, {
     method: 'POST',
@@ -32,8 +34,10 @@ export async function store(data, title, mode, publicKey, encryptedH, expiry) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `store failed: ${res.status}`);
   }
-  return res.json(); // { id }
+  return res.json(); // { id, storage }
 }
+
+// --- Delete ---
 
 export async function remove(id, deleteToken, key, password) {
   const body = { token: deleteToken };
@@ -50,33 +54,9 @@ export async function remove(id, deleteToken, key, password) {
   }
 }
 
-// --- Read operations ---
+// --- Read ---
 
-// Reassemble chunks from multiple records, verify Merkle root
-function reassembleFromRecords(records) {
-  // Each record is JSON: {v:2, n:N, i:I, d:"...", ...metadata in chunk 0}
-  const parsed = records.map(r => {
-    let data = r;
-    if (typeof r === 'string') {
-      try { data = JSON.parse(r); } catch { data = JSON.parse(r.replace(/^"|"$/g, '')); }
-    }
-    return data;
-  });
-
-  // Check for v2 format (chunked)
-  if (parsed.length > 0 && parsed[0].v === 2) {
-    // Sort by index
-    parsed.sort((a, b) => a.i - b.i);
-    const chunks = parsed.map(p => p.d);
-    const meta = parsed[0]; // chunk 0 has metadata
-    return { chunks, meta };
-  }
-
-  // v1 fallback — single record (legacy)
-  return { chunks: null, meta: parsed[0] || parsed };
-}
-
-// Direct read via worker CF API (no propagation delay — used for admin tab)
+// Worker API read (used for all R2 pastes and admin tab)
 export async function loadDirect(id, admin = false) {
   const res = await fetch(`${WORKER_URL}/read/${id}${admin ? '?admin=1' : ''}`);
   if (!res.ok) {
@@ -85,16 +65,17 @@ export async function loadDirect(id, admin = false) {
   }
   const result = await res.json();
 
-  // v2: worker returns {records: [...], meta: {...}}
+  // R2 response: flat object with d, m, c, t, k fields
+  if (result.d && !result.records) return result;
+
+  // DNS v2 chunked response
   if (result.records) {
     const chunks = result.records.sort((a, b) => a.i - b.i).map(r => r.d);
     const meta = result.records.find(r => r.i === 0) || {};
-
     if (meta.mr) {
       const valid = await verifyMerkleRoot(chunks, meta.mr);
       if (!valid) throw new Error('merkle root verification failed — data corrupted');
     }
-
     return { ...meta, d: reassembleChunks(chunks) };
   }
 
@@ -102,8 +83,19 @@ export async function loadDirect(id, admin = false) {
   return result;
 }
 
-// Read via DoH (cached at edge — used for share links)
+// Smart read: try worker API first (covers R2 + DNS), fall back to DoH for DNS pastes
 export async function load(id) {
+  try {
+    return await loadDirect(id);
+  } catch (e) {
+    // If worker returns 404, try DoH as last resort (edge-cached DNS pastes)
+    if (!e.message.includes('not found')) throw e;
+  }
+  return loadFromDoH(id);
+}
+
+// DoH fallback for DNS expiring pastes
+async function loadFromDoH(id) {
   const name = `${id}.d.${DOMAIN}`;
   const res = await fetch(`${DOH_URL}?name=${encodeURIComponent(name)}&type=TXT`, {
     headers: { 'Accept': 'application/dns-json' },
@@ -112,33 +104,25 @@ export async function load(id) {
   const dns = await res.json();
   if (!dns.Answer || !dns.Answer.length) throw new Error('paste not found');
 
-  // Parse a DoH TXT record value — handles DNS multi-string format ("part1" "part2")
   function parseTxtRecord(data) {
     let raw = data;
-    // DNS TXT records >255 bytes are split into multiple quoted strings: "seg1" "seg2"
-    // Join segments by removing the boundary markers before JSON parsing
     if (raw.includes('" "')) raw = raw.replace(/" "/g, '');
     try { raw = JSON.parse(raw); } catch { raw = raw.replace(/^"|"$/g, ''); }
     try { return JSON.parse(raw); } catch { return null; }
   }
 
-  // Multiple TXT records = v2 chunked format
   if (dns.Answer.length > 1) {
     const records = dns.Answer.map(a => parseTxtRecord(a.data)).filter(Boolean);
-
     const sorted = records.sort((a, b) => (a.i || 0) - (b.i || 0));
     const chunks = sorted.map(r => r.d);
     const meta = sorted.find(r => r.i === 0) || sorted[0] || {};
-
     if (meta && meta.mr) {
       const valid = await verifyMerkleRoot(chunks, meta.mr);
       if (!valid) throw new Error('merkle root verification failed — data corrupted');
     }
-
     return { ...meta, d: reassembleChunks(chunks) };
   }
 
-  // Single record — v1 or small v2
   const parsed = parseTxtRecord(dns.Answer[0].data);
   if (!parsed) throw new Error('corrupt paste data');
   return parsed;
@@ -149,7 +133,7 @@ export async function load(id) {
 export async function fetchWorkerKey() {
   const res = await fetch(`${WORKER_URL}/worker-key`);
   if (!res.ok) throw new Error('failed to fetch worker key');
-  return res.json(); // { publicKey, fingerprint }
+  return res.json();
 }
 
 export async function handshake(readerPublicKey) {
@@ -162,7 +146,7 @@ export async function handshake(readerPublicKey) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `handshake failed: ${res.status}`);
   }
-  return res.json(); // { encryptedKey, signature, workerFingerprint }
+  return res.json();
 }
 
 // --- Public directory ---

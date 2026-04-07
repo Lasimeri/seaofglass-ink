@@ -3,12 +3,12 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=14';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=14a';
-import { renderQR } from './qr.js?v=14';
-import { downloadPDF } from './pdf.js?v=14';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=14';
-import { highlight, detectLanguage } from './highlight.js?v=14';
+} from './crypto.js?v=15';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=15a';
+import { renderQR } from './qr.js?v=15';
+import { downloadPDF } from './pdf.js?v=15';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=15';
+import { highlight, detectLanguage } from './highlight.js?v=15';
 
 const $ = s => document.querySelector(s);
 
@@ -283,6 +283,8 @@ if (route.mode === 'create') {
     // (private key display removed)
   });
 
+  $('#expiry-select').addEventListener('change', () => { clearTimeout(sizeDebounce); sizeDebounce = setTimeout(calcSizes, 100); });
+
   pgpModeSelect.addEventListener('change', () => {
     const v = pgpModeSelect.value;
     pgpProvide.classList.toggle('hidden', v !== 'provide');
@@ -365,11 +367,18 @@ if (route.mode === 'create') {
       sizeEncrypted.textContent = `aes-gcm: ${fmt(s.encrypted)}`;
       sizeEncoded.textContent = `base64: ${fmt(s.encoded)}`;
       const total = s.encoded + 80;
-      // 8 chunks: chunk 0 = 1200 data + 2000 meta, chunks 1-7 = 3200 each → ~23600 usable
-      const limit = 23600;
-      const pct = Math.min(100, Math.round(total / limit * 100));
-      sizeLimit.textContent = `${pct}% of limit`;
-      sizeLimit.className = 'size-limit' + (pct > 95 ? ' danger' : pct > 75 ? ' warn' : '');
+      const expiry = parseInt($('#expiry-select').value) || 0;
+      if (expiry) {
+        // DNS path (4 chunks): ~10800 usable bytes
+        const limit = 10800;
+        const pct = Math.min(100, Math.round(total / limit * 100));
+        sizeLimit.textContent = `${pct}% of dns limit`;
+        sizeLimit.className = 'size-limit' + (pct > 95 ? ' danger' : pct > 75 ? ' warn' : '');
+      } else {
+        // R2 path: effectively unlimited
+        sizeLimit.textContent = '';
+        sizeLimit.className = 'size-limit';
+      }
     } catch { /* ignore */ }
   }
 

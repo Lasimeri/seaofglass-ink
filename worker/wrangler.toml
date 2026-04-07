@@ -2,3 +2,7 @@ name = "sea-ink"
 main = "src/index.ts"
 compatibility_date = "2026-03-30"
 compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "PASTE_BUCKET"
+bucket_name = "sea-ink-pastes"

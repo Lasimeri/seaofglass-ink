@@ -132,15 +132,13 @@ async function deriveKeyPBKDF2(password, salt) {
 
 // --- Deniable encryption (plausible deniability) ---
 // Pipeline per payload: data (already PGP-encrypted by caller) → brotli compress → AES-GCM (Argon2id)
-// Container: [0xDE][16 salt_r][16 salt_d][4-BE real_ct_len][12 iv_r][real_ct][12 iv_d][decoy_ct][random_pad]
+// Container: [0xDE][16 salt_r][16 salt_d][4-BE real_ct_len][4-BE decoy_ct_len][12 iv_r][real_ct][12 iv_d][decoy_ct][random_pad]
 // Fixed container size. Both Argon2id derivations always run (constant time).
-// Caller handles PGP encryption before calling these functions.
 
 const DENIABLE_CONTAINER = 2048;
-const DENIABLE_OVERHEAD = 1 + 16 + 16 + 4 + 12 + 12; // 61 bytes
+const DENIABLE_OVERHEAD = 1 + 16 + 16 + 4 + 4 + 12 + 12; // 65 bytes
 
 export async function encryptDeniable(realData, realPassword, decoyData, decoyPassword) {
-  // realData / decoyData are strings (PGP-encrypted + base64 from caller, or raw text)
   const realBytes = await compress(new TextEncoder().encode(realData));
   const decoyBytes = await compress(new TextEncoder().encode(decoyData));
 
@@ -161,7 +159,7 @@ export async function encryptDeniable(realData, realPassword, decoyData, decoyPa
   }
 
   const buf = new Uint8Array(DENIABLE_CONTAINER);
-  crypto.getRandomValues(buf); // unused bytes are random — indistinguishable from ciphertext
+  crypto.getRandomValues(buf);
   let p = 0;
   buf[p++] = 0xDE;
   buf.set(saltR, p); p += 16;
@@ -170,6 +168,10 @@ export async function encryptDeniable(realData, realPassword, decoyData, decoyPa
   buf[p++] = (realCt.length >> 16) & 0xff;
   buf[p++] = (realCt.length >> 8) & 0xff;
   buf[p++] = realCt.length & 0xff;
+  buf[p++] = (decoyCt.length >> 24) & 0xff;
+  buf[p++] = (decoyCt.length >> 16) & 0xff;
+  buf[p++] = (decoyCt.length >> 8) & 0xff;
+  buf[p++] = decoyCt.length & 0xff;
   buf.set(ivR, p); p += 12;
   buf.set(realCt, p); p += realCt.length;
   buf.set(ivD, p); p += 12;
@@ -188,10 +190,11 @@ export async function decryptDeniable(encoded, password) {
   const saltR = buf.slice(p, p + 16); p += 16;
   const saltD = buf.slice(p, p + 16); p += 16;
   const realCtLen = (buf[p] << 24) | (buf[p+1] << 16) | (buf[p+2] << 8) | buf[p+3]; p += 4;
+  const decoyCtLen = (buf[p] << 24) | (buf[p+1] << 16) | (buf[p+2] << 8) | buf[p+3]; p += 4;
   const ivR = buf.slice(p, p + 12); p += 12;
   const realCt = buf.slice(p, p + realCtLen); p += realCtLen;
   const ivD = buf.slice(p, p + 12); p += 12;
-  const decoyCt = buf.slice(p);
+  const decoyCt = buf.slice(p, p + decoyCtLen);
 
   // Always derive BOTH keys — constant time prevents timing attacks
   const [keyR, keyD] = await Promise.all([

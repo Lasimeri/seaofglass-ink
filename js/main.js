@@ -904,7 +904,7 @@ if (route.mode === 'read') {
   const decryptedText = $('#decrypted-text');
   const copyTextBtn = $('#copy-text');
 
-  log('fetching from dns...');
+  log('fetching...');
 
   load(route.id).then(async record => {
     if (record.e && Math.floor(Date.now() / 1000) > record.e) throw new Error('paste expired');
@@ -1060,7 +1060,7 @@ if (route.mode === 'password') {
   const decryptedText = $('#decrypted-text');
   const copyTextBtn = $('#copy-text');
 
-  log('fetching from dns...');
+  log('fetching...');
 
   load(route.id).then(record => {
     if (record.e && Math.floor(Date.now() / 1000) > record.e) throw new Error('paste expired');

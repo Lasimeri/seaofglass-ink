@@ -3,12 +3,12 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=17';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=17';
-import { renderQR } from './qr.js?v=17';
-import { downloadPDF } from './pdf.js?v=17';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=17';
-import { highlight, detectLanguage } from './highlight.js?v=17';
+} from './crypto.js?v=18';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=18';
+import { renderQR } from './qr.js?v=18';
+import { downloadPDF } from './pdf.js?v=18';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=18';
+import { highlight, detectLanguage } from './highlight.js?v=18';
 
 const $ = s => document.querySelector(s);
 
@@ -532,12 +532,13 @@ if (route.mode === 'create') {
         encryptedH = deleteHash; // public mode: plaintext hash
       }
 
-      // Send plaintext title for embed previews (non-password, non-PGP only)
+      // Embed metadata for non-password, non-PGP pastes (title + key stored for OG tags)
       const isEmbeddable = pgpMode === 'none' && mode !== 'password' && mode !== 'deniable';
       const plainTitle = isEmbeddable ? rawTitle : null;
+      const shareKey = isEmbeddable ? keyStr : null;
 
       const expiry = parseInt($('#expiry-select').value) || 0;
-      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry, plainTitle);
+      const result = await store(data, title, mode, mode === 'public' ? keyStr : undefined, encryptedH, expiry, plainTitle, shareKey);
 
       // Build admin URL and navigate the pre-opened tab
       let adminUrl;
@@ -547,12 +548,12 @@ if (route.mode === 'create') {
         adminUrl = `${location.origin}/#a:${result.id}:${keyStr}:${deleteToken}`;
       }
 
-      // Build share URL — embed URL for eligible pastes (provides OG tags for link previews)
+      // Build share URL — short embed URL for eligible R2 pastes
       let readerUrl;
       if (mode === 'password' || mode === 'deniable') {
         readerUrl = `${location.origin}/#p:${result.id}`;
       } else if (isEmbeddable && result.storage === 'r2') {
-        readerUrl = `${WORKER_URL}/embed/${result.id}/${keyStr}`;
+        readerUrl = `${location.origin}/s/${result.id}`;
       } else {
         readerUrl = `${location.origin}/#${result.id}:${keyStr}`;
       }

@@ -231,7 +231,7 @@ export default {
 			let body: any;
 			try { body = await request.json(); } catch { return err('invalid json'); }
 
-			const { data, title, plainTitle, mode, key: publicKey, h: encryptedH, expiry, chunks, merkleRoot } = body;
+			const { data, title, plainTitle, shareKey, mode, key: publicKey, h: encryptedH, expiry, chunks, merkleRoot } = body;
 			if (!['link', 'password', 'public', 'burn', 'deniable'].includes(mode)) return err('invalid mode');
 
 			const id = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
@@ -268,6 +268,7 @@ export default {
 
 			const meta: Record<string, string> = { mode, created: String(now) };
 			if (plainTitle) meta.plainTitle = String(plainTitle).slice(0, 100);
+			if (shareKey) meta.shareKey = String(shareKey);
 			await env.PASTE_BUCKET.put(id, JSON.stringify(paste), { customMetadata: meta });
 			return json({ id, storage: 'r2' }, 201);
 		}
@@ -402,33 +403,29 @@ export default {
 			return json(parsed);
 		}
 
-		// ── GET /embed/:id/:key ─────────────────────
-		// Serves HTML with OG/Twitter Card meta tags for link previews in messaging apps.
-		// Redirects to the actual paste page. Only works for non-password, non-PGP pastes.
-		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname.startsWith('/embed/')) {
-			const parts = url.pathname.slice(7).split('/');
-			const id = parts[0];
-			const key = parts[1] || '';
+		// ── GET /s/:id — short embed URL ────────────
+		// Served on seaofglass.ink/s/:id via Worker Route.
+		// Also accessible via worker subdomain for backward compat.
+		// Returns HTML with OG/Twitter Card meta tags + instant redirect.
+		if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname.startsWith('/s/')) {
+			const id = url.pathname.slice(3).replace(/\/$/, '');
 			if (!id || !/^[a-f0-9]{8,12}$/.test(id)) return err('invalid id');
 
 			let title = 'ink paste';
-			let description = 'encrypted pastebin — zero trust';
-			let mode = 'link';
+			let description = 'encrypted paste — seaofglass.ink';
+			let shareKey = '';
 
-			// Try R2 metadata for plaintext title
 			const obj = await env.PASTE_BUCKET.head(id);
 			if (obj?.customMetadata) {
 				if (obj.customMetadata.plainTitle) title = obj.customMetadata.plainTitle;
-				if (obj.customMetadata.mode) mode = obj.customMetadata.mode;
+				if (obj.customMetadata.shareKey) shareKey = obj.customMetadata.shareKey;
+				const mode = obj.customMetadata.mode;
+				if (mode === 'public') description = 'public paste — seaofglass.ink';
+				else if (mode === 'burn') description = 'burn after read — seaofglass.ink';
 			}
 
-			if (mode === 'public') description = 'public paste — seaofglass.ink';
-			else if (mode === 'burn') description = 'burn after read — seaofglass.ink';
-			else description = 'encrypted paste — seaofglass.ink';
-
-			// Build redirect URL
-			const redirectUrl = key
-				? `https://${DOMAIN}/#${id}:${key}`
+			const redirectUrl = shareKey
+				? `https://${DOMAIN}/#${id}:${shareKey}`
 				: `https://${DOMAIN}/#${id}`;
 
 			const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -439,7 +436,7 @@ export default {
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="ink — sea of glass">
-<meta property="og:url" content="${esc(redirectUrl)}">
+<meta property="og:url" content="https://${DOMAIN}/s/${id}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">

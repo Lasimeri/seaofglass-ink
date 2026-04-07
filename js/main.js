@@ -3,12 +3,12 @@ import {
   encrypt, decrypt, encryptWithPassword, decryptWithPassword,
   encryptDeniable, decryptDeniable,
   estimateSizes, sha256hex, encryptRaw, encryptRawWithPassword,
-} from './crypto.js?v=15';
-import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=15a';
-import { renderQR } from './qr.js?v=15';
-import { downloadPDF } from './pdf.js?v=15';
-import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=15';
-import { highlight, detectLanguage } from './highlight.js?v=15';
+} from './crypto.js?v=16';
+import { store, load, loadDirect, remove, listPublic, WORKER_URL } from './storage.js?v=16a';
+import { renderQR } from './qr.js?v=16';
+import { downloadPDF } from './pdf.js?v=16';
+import { fuzzySearch, markdownToHtml, pgpKeygen, pgpEncrypt, pgpDecrypt, pgpFingerprint } from './wasm.js?v=16';
+import { highlight, detectLanguage } from './highlight.js?v=16';
 
 const $ = s => document.querySelector(s);
 

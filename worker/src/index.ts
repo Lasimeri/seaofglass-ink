@@ -407,7 +407,7 @@ export default {
 			const publicPastes: any[] = [];
 
 			// R2: list objects with mode=public metadata
-			const listed = await env.PASTE_BUCKET.list({ limit: 500 });
+			const listed = await env.PASTE_BUCKET.list({ limit: 500, include: ['customMetadata'] });
 			for (const obj of listed.objects) {
 				if (obj.customMetadata?.mode === 'public') {
 					const full = await env.PASTE_BUCKET.get(obj.key);

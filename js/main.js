@@ -675,7 +675,7 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
     }
 
     if (route.mode === 'admin') {
-      // Build reader share link (no delete token)
+      // Default share link (overridden to short URL after decryption if eligible)
       adminShareLink.value = `${location.origin}/#${route.id}:${route.key}`;
 
       // QR code for share link
@@ -697,6 +697,14 @@ if (route.mode === 'admin' || route.mode === 'admin-password') {
         }
         const rawText = await decrypt(record.d, key);
         const { content: text, pubkey } = extractPubKey(rawText);
+
+        // Use short embed URL for non-PGP pastes
+        if (!pubkey) {
+          const shortUrl = `${location.origin}/s/${route.id}`;
+          adminShareLink.value = shortUrl;
+          const qrCanvas = $('#admin-qr');
+          if (qrCanvas) { try { renderQR(qrCanvas, shortUrl); } catch {} }
+        }
 
         if (pubkey) {
           // PGP-encrypted — require private key before showing content

@@ -407,19 +407,6 @@ export default {
 		// Utility endpoints (must be before /s/:id catch-all)
 		// ════════════════════════════════════════════
 
-		// ── GET /s/ip — requester IP ────────────────
-		if (request.method === 'GET' && url.pathname === '/s/ip') {
-			const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
-			return cors(new Response(clientIp, { headers: { 'Content-Type': 'text/plain' } }));
-		}
-
-		// ── GET /s/headers — request headers dump ───
-		if (request.method === 'GET' && url.pathname === '/s/headers') {
-			const hdrs: Record<string, string> = {};
-			for (const [k, v] of request.headers) hdrs[k] = v;
-			return json(hdrs);
-		}
-
 		// ── GET /s/blot — ASCII Rorschach inkblot ────
 		if (request.method === 'GET' && url.pathname === '/s/blot') {
 			const ts = String(Date.now());
@@ -443,58 +430,6 @@ export default {
 			return cors(new Response(blot, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }));
 		}
 
-		// ── GET /s/dns/:type/:domain — DNS lookup via DoH ──
-		if (request.method === 'GET' && url.pathname.startsWith('/s/dns/')) {
-			const parts = url.pathname.slice(7).split('/');
-			if (parts.length < 2) return err('usage: /s/dns/:type/:domain');
-			const qtype = parts[0].toUpperCase();
-			const domain = parts.slice(1).join('/');
-			const allowed = ['A', 'AAAA', 'MX', 'TXT', 'CNAME', 'NS', 'SOA'];
-			if (!allowed.includes(qtype)) return err('unsupported type. allowed: ' + allowed.join(', '));
-			if (!domain) return err('missing domain');
-			const dohRes = await fetch(
-				`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${qtype}`,
-				{ headers: { 'Accept': 'application/dns-json' } },
-			);
-			if (!dohRes.ok) return err('doh query failed: ' + dohRes.status, 502);
-			const dohData = await dohRes.json();
-			return json(dohData);
-		}
-
-		// ── GET /s/ping/:url — HTTP ping with timing ──
-		if (request.method === 'GET' && url.pathname.startsWith('/s/ping/')) {
-			let target = decodeURIComponent(url.pathname.slice(8));
-			if (!target) return err('missing url');
-			if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
-			try {
-				const controller = new AbortController();
-				const timer = setTimeout(() => controller.abort(), 5000);
-				const t0 = Date.now();
-				const pingRes = await fetch(target, { signal: controller.signal, redirect: 'follow' });
-				const t1 = Date.now();
-				clearTimeout(timer);
-				const resHeaders: Record<string, string> = {};
-				for (const [k, v] of pingRes.headers) resHeaders[k] = v;
-				return json({ url: target, status: pingRes.status, time_ms: t1 - t0, headers: resHeaders });
-			} catch (e: any) {
-				return json({ url: target, error: e.message || 'fetch failed' });
-			}
-		}
-
-		// ── GET /s/whois/:domain — RDAP lookup ──────
-		if (request.method === 'GET' && url.pathname.startsWith('/s/whois/')) {
-			const domain = url.pathname.slice(9);
-			if (!domain) return err('missing domain');
-			try {
-				const rdapRes = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
-				if (!rdapRes.ok) return err('rdap lookup failed: ' + rdapRes.status, 502);
-				const rdapData = await rdapRes.json();
-				return json(rdapData);
-			} catch (e: any) {
-				return json({ error: e.message || 'rdap fetch failed' }, 502);
-			}
-		}
-
 		// ── GET/POST /s/canary — warrant canary ─────
 		if (url.pathname === '/s/canary') {
 			if (request.method === 'GET') {
@@ -512,78 +447,6 @@ export default {
 				await env.PASTE_BUCKET.put('canary:current', JSON.stringify(canary));
 				return json(canary, 201);
 			}
-		}
-
-		// ── GET /s/b64/encode/:text — base64 encode ──
-		if (request.method === 'GET' && url.pathname.startsWith('/s/b64/encode/')) {
-			const text = decodeURIComponent(url.pathname.slice(14));
-			const encoded = btoa(unescape(encodeURIComponent(text)));
-			return cors(new Response(encoded, { headers: { 'Content-Type': 'text/plain' } }));
-		}
-
-		// ── GET /s/b64/decode/:text — base64 decode ──
-		if (request.method === 'GET' && url.pathname.startsWith('/s/b64/decode/')) {
-			const raw = decodeURIComponent(url.pathname.slice(14));
-			try {
-				const safe = raw.replace(/-/g, '+').replace(/_/g, '/');
-				const padded = safe + '='.repeat((4 - safe.length % 4) % 4);
-				const decoded = decodeURIComponent(escape(atob(padded)));
-				return cors(new Response(decoded, { headers: { 'Content-Type': 'text/plain' } }));
-			} catch {
-				return err('invalid base64');
-			}
-		}
-
-		// ── POST /s/go + GET /s/go/:id — URL shortener ──
-		if (request.method === 'POST' && url.pathname === '/s/go') {
-			let body: any;
-			try { body = await request.json(); } catch { return err('invalid json'); }
-			if (!body.url || typeof body.url !== 'string') return err('missing url');
-			try { new URL(body.url); } catch { return err('invalid url'); }
-			const idBytes = new Uint8Array(3);
-			crypto.getRandomValues(idBytes);
-			const shortId = Array.from(idBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-			await env.PASTE_BUCKET.put(`short:${shortId}`, body.url);
-			return json({ id: shortId, url: `https://${DOMAIN}/s/go/${shortId}` }, 201);
-		}
-		if (request.method === 'GET' && url.pathname.startsWith('/s/go/')) {
-			const shortId = url.pathname.slice(6);
-			if (!shortId) return err('missing id');
-			const obj = await env.PASTE_BUCKET.get(`short:${shortId}`);
-			if (!obj) return err('not found', 404);
-			const target = await obj.text();
-			return cors(new Response(null, { status: 301, headers: { 'Location': target } }));
-		}
-
-		// ── POST /s/tmp + GET /s/tmp/:id — temp file drop ──
-		if (request.method === 'POST' && url.pathname === '/s/tmp') {
-			const cl = request.headers.get('content-length');
-			if (cl && parseInt(cl, 10) > 10485760) return err('file too large (10MB max)', 413);
-			const contentType = request.headers.get('content-type') || 'application/octet-stream';
-			const idBytes = new Uint8Array(3);
-			crypto.getRandomValues(idBytes);
-			const tmpId = Array.from(idBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-			const expires = Date.now() + 3600000;
-			const bodyData = await request.arrayBuffer();
-			if (bodyData.byteLength > 10485760) return err('file too large (10MB max)', 413);
-			await env.PASTE_BUCKET.put(`tmp:${tmpId}`, bodyData, {
-				customMetadata: { contentType, expires: String(expires) },
-			});
-			return json({ id: tmpId, url: `https://${DOMAIN}/s/tmp/${tmpId}`, expires }, 201);
-		}
-		if (request.method === 'GET' && url.pathname.startsWith('/s/tmp/')) {
-			const tmpId = url.pathname.slice(7);
-			if (!tmpId) return err('missing id');
-			const obj = await env.PASTE_BUCKET.get(`tmp:${tmpId}`);
-			if (!obj) return err('not found', 404);
-			const meta = obj.customMetadata || {};
-			const expires = parseInt(meta.expires || '0', 10);
-			if (expires && Date.now() > expires) {
-				await env.PASTE_BUCKET.delete(`tmp:${tmpId}`);
-				return err('expired', 410);
-			}
-			const ct = meta.contentType || 'application/octet-stream';
-			return cors(new Response(obj.body, { headers: { 'Content-Type': ct } }));
 		}
 
 		// ── GET/POST /s/drift — anonymous paste exchange ──
@@ -695,44 +558,6 @@ function clear_(){t.value='';save()}
 				return json({ saved: true, expires: exp });
 			}
 			return err('method not allowed', 405);
-		}
-
-		// ── GET /s/proxy — CORS proxy for seaof.glass ────
-		if (url.pathname === '/s/proxy' && (request.method === 'GET' || request.method === 'OPTIONS')) {
-			if (request.method === 'OPTIONS') {
-				return cors(new Response(null, { status: 204 }));
-			}
-			const targetUrl = url.searchParams.get('url');
-			if (!targetUrl) return err('missing ?url= parameter');
-			let parsed: URL;
-			try { parsed = new URL(targetUrl); } catch { return err('invalid url'); }
-			if (!['http:', 'https:'].includes(parsed.protocol)) return err('only http/https');
-			const host = parsed.hostname;
-			if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.|localhost|::1|\[::1\])/.test(host)) {
-				return err('private addresses blocked');
-			}
-			try {
-				const controller = new AbortController();
-				const timeout = setTimeout(() => controller.abort(), 5000);
-				const proxyRes = await fetch(targetUrl, {
-					signal: controller.signal,
-					headers: { 'User-Agent': 'seaofglass-proxy/1.0' },
-					redirect: 'follow',
-				});
-				clearTimeout(timeout);
-				const body = await proxyRes.arrayBuffer();
-				if (body.byteLength > 1048576) return err('response too large (1MB max)', 413);
-				const h = new Headers();
-				h.set('Access-Control-Allow-Origin', '*');
-				h.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-				h.set('Access-Control-Allow-Headers', '*');
-				h.set('Content-Type', proxyRes.headers.get('Content-Type') || 'application/octet-stream');
-				h.set('X-Proxy-Status', String(proxyRes.status));
-				h.set('X-Proxy-URL', targetUrl);
-				return new Response(body, { status: proxyRes.status, headers: h });
-			} catch (e: any) {
-				return err('proxy error: ' + e.message, 502);
-			}
 		}
 
 		// ════════════════════════════════════════════

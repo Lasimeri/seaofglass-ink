@@ -403,6 +403,342 @@ export default {
 			return json(parsed);
 		}
 
+		// ════════════════════════════════════════════
+		// Utility endpoints (must be before /s/:id catch-all)
+		// ════════════════════════════════════════════
+
+		// ── GET /s/ip — requester IP ────────────────
+		if (request.method === 'GET' && url.pathname === '/s/ip') {
+			const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+			return cors(new Response(clientIp, { headers: { 'Content-Type': 'text/plain' } }));
+		}
+
+		// ── GET /s/headers — request headers dump ───
+		if (request.method === 'GET' && url.pathname === '/s/headers') {
+			const hdrs: Record<string, string> = {};
+			for (const [k, v] of request.headers) hdrs[k] = v;
+			return json(hdrs);
+		}
+
+		// ── GET /s/blot — ASCII Rorschach inkblot ────
+		if (request.method === 'GET' && url.pathname === '/s/blot') {
+			const ts = String(Date.now());
+			const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ts));
+			const bytes = new Uint8Array(hashBuf);
+			const hashHex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+			const chars = ['█', '▓', '▒', '░', ' '];
+			const half = 8;
+			const rows: string[] = [];
+			for (let y = 0; y < 15; y++) {
+				const left: string[] = [];
+				for (let x = 0; x < half; x++) {
+					const idx = (y * half + x) % bytes.length;
+					left.push(chars[bytes[idx] % chars.length]);
+				}
+				const center = chars[bytes[(y * half + half) % bytes.length] % chars.length];
+				const right = [...left].reverse();
+				rows.push(left.join('') + center + right.join(''));
+			}
+			const blot = rows.join('\n') + '\n\n' + hashHex;
+			return cors(new Response(blot, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }));
+		}
+
+		// ── GET /s/dns/:type/:domain — DNS lookup via DoH ──
+		if (request.method === 'GET' && url.pathname.startsWith('/s/dns/')) {
+			const parts = url.pathname.slice(7).split('/');
+			if (parts.length < 2) return err('usage: /s/dns/:type/:domain');
+			const qtype = parts[0].toUpperCase();
+			const domain = parts.slice(1).join('/');
+			const allowed = ['A', 'AAAA', 'MX', 'TXT', 'CNAME', 'NS', 'SOA'];
+			if (!allowed.includes(qtype)) return err('unsupported type. allowed: ' + allowed.join(', '));
+			if (!domain) return err('missing domain');
+			const dohRes = await fetch(
+				`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${qtype}`,
+				{ headers: { 'Accept': 'application/dns-json' } },
+			);
+			if (!dohRes.ok) return err('doh query failed: ' + dohRes.status, 502);
+			const dohData = await dohRes.json();
+			return json(dohData);
+		}
+
+		// ── GET /s/ping/:url — HTTP ping with timing ──
+		if (request.method === 'GET' && url.pathname.startsWith('/s/ping/')) {
+			let target = decodeURIComponent(url.pathname.slice(8));
+			if (!target) return err('missing url');
+			if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
+			try {
+				const controller = new AbortController();
+				const timer = setTimeout(() => controller.abort(), 5000);
+				const t0 = Date.now();
+				const pingRes = await fetch(target, { signal: controller.signal, redirect: 'follow' });
+				const t1 = Date.now();
+				clearTimeout(timer);
+				const resHeaders: Record<string, string> = {};
+				for (const [k, v] of pingRes.headers) resHeaders[k] = v;
+				return json({ url: target, status: pingRes.status, time_ms: t1 - t0, headers: resHeaders });
+			} catch (e: any) {
+				return json({ url: target, error: e.message || 'fetch failed' });
+			}
+		}
+
+		// ── GET /s/whois/:domain — RDAP lookup ──────
+		if (request.method === 'GET' && url.pathname.startsWith('/s/whois/')) {
+			const domain = url.pathname.slice(9);
+			if (!domain) return err('missing domain');
+			try {
+				const rdapRes = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
+				if (!rdapRes.ok) return err('rdap lookup failed: ' + rdapRes.status, 502);
+				const rdapData = await rdapRes.json();
+				return json(rdapData);
+			} catch (e: any) {
+				return json({ error: e.message || 'rdap fetch failed' }, 502);
+			}
+		}
+
+		// ── GET/POST /s/canary — warrant canary ─────
+		if (url.pathname === '/s/canary') {
+			if (request.method === 'GET') {
+				const obj = await env.PASTE_BUCKET.get('canary:current');
+				if (!obj) return err('no canary set', 404);
+				const data = JSON.parse(await obj.text());
+				return json(data);
+			}
+			if (request.method === 'POST') {
+				let body: any;
+				try { body = await request.json(); } catch { return err('invalid json'); }
+				if (!body.secret || body.secret !== env.PURGE_SECRET) return err('unauthorized', 403);
+				if (!body.message || typeof body.message !== 'string') return err('missing message');
+				const canary = { message: body.message, updated: new Date().toISOString() };
+				await env.PASTE_BUCKET.put('canary:current', JSON.stringify(canary));
+				return json(canary, 201);
+			}
+		}
+
+		// ── GET /s/b64/encode/:text — base64 encode ──
+		if (request.method === 'GET' && url.pathname.startsWith('/s/b64/encode/')) {
+			const text = decodeURIComponent(url.pathname.slice(14));
+			const encoded = btoa(unescape(encodeURIComponent(text)));
+			return cors(new Response(encoded, { headers: { 'Content-Type': 'text/plain' } }));
+		}
+
+		// ── GET /s/b64/decode/:text — base64 decode ──
+		if (request.method === 'GET' && url.pathname.startsWith('/s/b64/decode/')) {
+			const raw = decodeURIComponent(url.pathname.slice(14));
+			try {
+				const safe = raw.replace(/-/g, '+').replace(/_/g, '/');
+				const padded = safe + '='.repeat((4 - safe.length % 4) % 4);
+				const decoded = decodeURIComponent(escape(atob(padded)));
+				return cors(new Response(decoded, { headers: { 'Content-Type': 'text/plain' } }));
+			} catch {
+				return err('invalid base64');
+			}
+		}
+
+		// ── POST /s/go + GET /s/go/:id — URL shortener ──
+		if (request.method === 'POST' && url.pathname === '/s/go') {
+			let body: any;
+			try { body = await request.json(); } catch { return err('invalid json'); }
+			if (!body.url || typeof body.url !== 'string') return err('missing url');
+			try { new URL(body.url); } catch { return err('invalid url'); }
+			const idBytes = new Uint8Array(3);
+			crypto.getRandomValues(idBytes);
+			const shortId = Array.from(idBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+			await env.PASTE_BUCKET.put(`short:${shortId}`, body.url);
+			return json({ id: shortId, url: `https://${DOMAIN}/s/go/${shortId}` }, 201);
+		}
+		if (request.method === 'GET' && url.pathname.startsWith('/s/go/')) {
+			const shortId = url.pathname.slice(6);
+			if (!shortId) return err('missing id');
+			const obj = await env.PASTE_BUCKET.get(`short:${shortId}`);
+			if (!obj) return err('not found', 404);
+			const target = await obj.text();
+			return cors(new Response(null, { status: 301, headers: { 'Location': target } }));
+		}
+
+		// ── POST /s/tmp + GET /s/tmp/:id — temp file drop ──
+		if (request.method === 'POST' && url.pathname === '/s/tmp') {
+			const cl = request.headers.get('content-length');
+			if (cl && parseInt(cl, 10) > 10485760) return err('file too large (10MB max)', 413);
+			const contentType = request.headers.get('content-type') || 'application/octet-stream';
+			const idBytes = new Uint8Array(3);
+			crypto.getRandomValues(idBytes);
+			const tmpId = Array.from(idBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+			const expires = Date.now() + 3600000;
+			const bodyData = await request.arrayBuffer();
+			if (bodyData.byteLength > 10485760) return err('file too large (10MB max)', 413);
+			await env.PASTE_BUCKET.put(`tmp:${tmpId}`, bodyData, {
+				customMetadata: { contentType, expires: String(expires) },
+			});
+			return json({ id: tmpId, url: `https://${DOMAIN}/s/tmp/${tmpId}`, expires }, 201);
+		}
+		if (request.method === 'GET' && url.pathname.startsWith('/s/tmp/')) {
+			const tmpId = url.pathname.slice(7);
+			if (!tmpId) return err('missing id');
+			const obj = await env.PASTE_BUCKET.get(`tmp:${tmpId}`);
+			if (!obj) return err('not found', 404);
+			const meta = obj.customMetadata || {};
+			const expires = parseInt(meta.expires || '0', 10);
+			if (expires && Date.now() > expires) {
+				await env.PASTE_BUCKET.delete(`tmp:${tmpId}`);
+				return err('expired', 410);
+			}
+			const ct = meta.contentType || 'application/octet-stream';
+			return cors(new Response(obj.body, { headers: { 'Content-Type': ct } }));
+		}
+
+		// ── GET/POST /s/drift — anonymous paste exchange ──
+		if (url.pathname === '/s/drift') {
+			const DRIFT_KEY = 'drift:queue';
+			if (request.method === 'GET') {
+				const obj = await env.PASTE_BUCKET.head(DRIFT_KEY);
+				return json({ available: !!obj });
+			}
+			if (request.method === 'POST') {
+				const ct = request.headers.get('Content-Type');
+				if (!ct || !ct.includes('application/json')) return err('invalid content type');
+				let body: any;
+				try { body = await request.json(); } catch { return err('invalid json'); }
+				if (!body.data || typeof body.data !== 'string') return err('missing data');
+				if (body.data.length > 50000) return err('too large (50KB max)', 413);
+				const existing = await env.PASTE_BUCKET.get(DRIFT_KEY);
+				const now = Math.floor(Date.now() / 1000);
+				await env.PASTE_BUCKET.put(DRIFT_KEY, JSON.stringify({ d: body.data, t: now }));
+				if (existing) {
+					const old = JSON.parse(await existing.text());
+					return json({ found: true, data: old.d, drifted: now - old.t });
+				}
+				return json({ found: false, message: 'your message is adrift' });
+			}
+			return err('method not allowed', 405);
+		}
+
+		// ── GET/POST /s/seal — time-locked encryption ────
+		if (url.pathname === '/s/seal' && request.method === 'POST') {
+			const ct = request.headers.get('Content-Type');
+			if (!ct || !ct.includes('application/json')) return err('invalid content type');
+			let body: any;
+			try { body = await request.json(); } catch { return err('invalid json'); }
+			const { data, unlock, title } = body;
+			if (!data || typeof data !== 'string') return err('missing data');
+			if (!unlock || typeof unlock !== 'number') return err('missing unlock timestamp');
+			if (data.length > 100000) return err('too large (100KB max)', 413);
+			const now = Math.floor(Date.now() / 1000);
+			if (unlock <= now) return err('unlock must be in the future');
+			if (unlock - now > 365 * 86400) return err('max 1 year lock');
+			const id = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+			await env.PASTE_BUCKET.put(`seal:${id}`, JSON.stringify({ d: data, u: unlock, t: now, ...(title ? { n: title } : {}) }), {
+				customMetadata: { unlock: String(unlock) },
+			});
+			return json({ id, unlock, url: `https://${DOMAIN}/s/seal/${id}` }, 201);
+		}
+		if (url.pathname.startsWith('/s/seal/') && (request.method === 'GET' || request.method === 'HEAD')) {
+			const id = url.pathname.slice(8);
+			if (!/^[a-f0-9]{8,12}$/.test(id)) return err('invalid id');
+			const obj = await env.PASTE_BUCKET.get(`seal:${id}`);
+			if (!obj) return err('not found', 404);
+			const sealed = JSON.parse(await obj.text());
+			const now = Math.floor(Date.now() / 1000);
+			if (now < sealed.u) {
+				return json({ locked: true, unlock: sealed.u, remaining: sealed.u - now, title: sealed.n || null });
+			}
+			return json({ locked: false, data: sealed.d, sealed_at: sealed.t, unlocked_at: sealed.u, title: sealed.n || null });
+		}
+
+		// ── GET/POST /s/share — ephemeral clipboard relay ──
+		if (url.pathname === '/s/share' && request.method === 'GET') {
+			const shareId = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+			const shareHtml = `<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>share — ink</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0f;color:#c4945a;font-family:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace;padding:1.5rem;max-width:700px;margin:0 auto}h1{font-size:1rem;margin-bottom:0.3rem}p{font-size:0.65rem;opacity:0.5;margin-bottom:1rem}textarea{width:100%;height:60vh;background:#12121a;color:#c4945a;border:1px solid #1e1e2e;padding:0.8rem;font:inherit;font-size:0.8rem;resize:vertical;outline:none}textarea:focus{border-color:#c4945a}.bar{display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center}.bar button{background:none;border:1px solid #1e1e2e;color:#c4945a;padding:0.3rem 0.8rem;font:inherit;font-size:0.7rem;cursor:pointer}.bar button:hover{border-color:#c4945a}.status{font-size:0.6rem;opacity:0.5}</style>
+</head><body>
+<h1>shared clipboard</h1>
+<p>anyone with this URL can read and write — auto-syncs every 2s</p>
+<textarea id="t" placeholder="type here..." spellcheck="false"></textarea>
+<div class="bar"><button onclick="copy()">copy</button><button onclick="clear_()">clear</button><span class="status" id="s"></span></div>
+<script>
+const id='${shareId}',base=location.origin+'/s/share/';
+let last='',saving=false,syncing=false;
+const t=document.getElementById('t'),s=document.getElementById('s');
+async function sync(){if(saving||syncing)return;syncing=true;try{const r=await fetch(base+id);if(r.ok){const d=await r.json();if(d.text!==undefined&&d.text!==last){last=d.text;if(t.value!==d.text)t.value=d.text;s.textContent='synced'}}}catch{}syncing=false}
+async function save(){if(syncing)return;saving=true;try{await fetch(base+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t.value})});last=t.value;s.textContent='saved'}catch{s.textContent='error'}saving=false}
+let timer;t.addEventListener('input',()=>{clearTimeout(timer);s.textContent='typing...';timer=setTimeout(save,500)});
+setInterval(sync,2000);sync();
+function copy(){navigator.clipboard.writeText(t.value);s.textContent='copied'}
+function clear_(){t.value='';save()}
+</script></body></html>`;
+			return new Response(shareHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+		}
+		if (url.pathname.startsWith('/s/share/')) {
+			const id = url.pathname.slice(9);
+			if (!/^[a-f0-9]{6,12}$/.test(id)) return err('invalid id');
+			const SHARE_KEY = `share:${id}`;
+			const SHARE_TTL = 300;
+			if (request.method === 'GET') {
+				const obj = await env.PASTE_BUCKET.get(SHARE_KEY);
+				if (!obj) return json({ text: '' });
+				const data = JSON.parse(await obj.text());
+				if (data.exp && Date.now() / 1000 > data.exp) {
+					await env.PASTE_BUCKET.delete(SHARE_KEY);
+					return json({ text: '' });
+				}
+				return json({ text: data.text || '' });
+			}
+			if (request.method === 'POST') {
+				const ct = request.headers.get('Content-Type');
+				if (!ct || !ct.includes('application/json')) return err('invalid content type');
+				let body: any;
+				try { body = await request.json(); } catch { return err('invalid json'); }
+				const text = typeof body.text === 'string' ? body.text.slice(0, 50000) : '';
+				const exp = Math.floor(Date.now() / 1000) + SHARE_TTL;
+				await env.PASTE_BUCKET.put(SHARE_KEY, JSON.stringify({ text, exp }));
+				return json({ saved: true, expires: exp });
+			}
+			return err('method not allowed', 405);
+		}
+
+		// ── GET /s/proxy — CORS proxy for seaof.glass ────
+		if (url.pathname === '/s/proxy' && (request.method === 'GET' || request.method === 'OPTIONS')) {
+			if (request.method === 'OPTIONS') {
+				return cors(new Response(null, { status: 204 }));
+			}
+			const targetUrl = url.searchParams.get('url');
+			if (!targetUrl) return err('missing ?url= parameter');
+			let parsed: URL;
+			try { parsed = new URL(targetUrl); } catch { return err('invalid url'); }
+			if (!['http:', 'https:'].includes(parsed.protocol)) return err('only http/https');
+			const host = parsed.hostname;
+			if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.|localhost|::1|\[::1\])/.test(host)) {
+				return err('private addresses blocked');
+			}
+			try {
+				const controller = new AbortController();
+				const timeout = setTimeout(() => controller.abort(), 5000);
+				const proxyRes = await fetch(targetUrl, {
+					signal: controller.signal,
+					headers: { 'User-Agent': 'seaofglass-proxy/1.0' },
+					redirect: 'follow',
+				});
+				clearTimeout(timeout);
+				const body = await proxyRes.arrayBuffer();
+				if (body.byteLength > 1048576) return err('response too large (1MB max)', 413);
+				const h = new Headers();
+				h.set('Access-Control-Allow-Origin', '*');
+				h.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+				h.set('Access-Control-Allow-Headers', '*');
+				h.set('Content-Type', proxyRes.headers.get('Content-Type') || 'application/octet-stream');
+				h.set('X-Proxy-Status', String(proxyRes.status));
+				h.set('X-Proxy-URL', targetUrl);
+				return new Response(body, { status: proxyRes.status, headers: h });
+			} catch (e: any) {
+				return err('proxy error: ' + e.message, 502);
+			}
+		}
+
+		// ════════════════════════════════════════════
+		// Paste embed (catch-all for /s/:id — must be LAST)
+		// ════════════════════════════════════════════
+
 		// ── GET /s/:id — short embed URL ────────────
 		// Served on seaofglass.ink/s/:id via Worker Route.
 		// Also accessible via worker subdomain for backward compat.

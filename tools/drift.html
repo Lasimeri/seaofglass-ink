@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>drift — sea of glass</title>
+  <meta name="theme-color" content="#0a0a0f">
+  <style>
+    :root { --bg: #0a0a0f; --surface: #12121a; --border: #1e1e2e; --text: #c4945a; --text-dim: #a07a48; --accent: #c4945a; --mono: 'SF Mono','Cascadia Code','Fira Code','Consolas',monospace; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--mono); background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 1rem; font-weight: 400; margin-bottom: 0.25rem; }
+    h1 a { color: var(--text-dim); text-decoration: none; }
+    h1 a:hover { color: var(--text); }
+    .subtitle { font-size: 0.65rem; color: var(--text-dim); opacity: 0.6; margin-bottom: 1.5rem; }
+    textarea { width: 100%; height: 30vh; background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 0.8rem; font: inherit; font-size: 0.8rem; resize: vertical; outline: none; margin-bottom: 0.75rem; }
+    textarea:focus { border-color: var(--accent); }
+    .bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+    button { background: none; border: 1px solid var(--border); color: var(--text); padding: 0.3rem 0.8rem; font: inherit; font-size: 0.7rem; cursor: pointer; }
+    button:hover { border-color: var(--text); }
+    button:disabled { opacity: 0.3; cursor: default; }
+    .status { font-size: 0.65rem; color: var(--text-dim); }
+    .result { background: var(--surface); border: 1px solid var(--border); padding: 0.8rem; font-size: 0.8rem; white-space: pre-wrap; margin-top: 1rem; min-height: 5rem; }
+    .result-meta { font-size: 0.6rem; color: var(--text-dim); opacity: 0.6; margin-top: 0.5rem; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><a href="/">ink</a> / drift</h1>
+    <p class="subtitle">message in a bottle — post yours, receive someone else's</p>
+    <textarea id="msg" placeholder="write your message..." spellcheck="false"></textarea>
+    <div class="bar">
+      <button id="send" onclick="send()">cast adrift</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div id="received" class="hidden">
+      <div class="result" id="result"></div>
+      <div class="result-meta" id="meta"></div>
+    </div>
+  </div>
+  <script>
+    const WORKER = 'https://sea-ink.seaofglass.workers.dev';
+    async function send() {
+      const msg = document.getElementById('msg').value.trim();
+      if (!msg) return;
+      document.getElementById('send').disabled = true;
+      document.getElementById('status').textContent = 'sending...';
+      try {
+        const r = await fetch(WORKER + '/s/drift', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: msg }),
+        });
+        const d = await r.json();
+        if (d.found) {
+          document.getElementById('result').textContent = d.data;
+          const mins = Math.floor(d.drifted / 60);
+          const hrs = Math.floor(mins / 60);
+          const timeStr = hrs > 0 ? `${hrs}h ${mins % 60}m` : mins > 0 ? `${mins}m` : `${d.drifted}s`;
+          document.getElementById('meta').textContent = `drifted for ${timeStr}`;
+          document.getElementById('received').classList.remove('hidden');
+          document.getElementById('status').textContent = 'you found a message';
+        } else {
+          document.getElementById('received').classList.add('hidden');
+          document.getElementById('status').textContent = 'your message is adrift — check back later';
+        }
+        document.getElementById('msg').value = '';
+      } catch (e) {
+        document.getElementById('status').textContent = 'error: ' + e.message;
+      }
+      document.getElementById('send').disabled = false;
+    }
+  </script>
+</body>
+</html>

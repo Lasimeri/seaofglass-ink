@@ -41,9 +41,29 @@ body {
    ============================================================ */
 
 header { margin-bottom: 1.5rem; }
+.header-row { display: flex; justify-content: space-between; align-items: flex-start; }
 h1 { font-size: 1.1rem; font-weight: 400; color: var(--text-dim); margin-bottom: 0.25rem; letter-spacing: 0.05em; }
 h1 span { color: var(--accent); }
 .subtitle { font-size: 0.7rem; color: var(--text-dim); opacity: 0.6; }
+
+.tools-dropdown { position: relative; }
+.tools-dropdown summary {
+  font-size: 0.7rem; color: var(--text-dim); cursor: pointer; list-style: none;
+  border: 1px solid var(--border); padding: 0.25rem 0.6rem; user-select: none;
+}
+.tools-dropdown summary:hover { border-color: var(--accent); color: var(--accent); }
+.tools-dropdown summary::-webkit-details-marker { display: none; }
+.tools-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10;
+  background: var(--surface); border: 1px solid var(--border);
+  display: flex; flex-direction: column; min-width: 120px;
+}
+.tools-menu a {
+  font-size: 0.7rem; color: var(--text-dim); text-decoration: none;
+  padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--border);
+}
+.tools-menu a:last-child { border-bottom: none; }
+.tools-menu a:hover { color: var(--accent); background: var(--bg); }
 
 /* ============================================================
    Status

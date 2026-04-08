@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>share — sea of glass</title>
+  <meta name="theme-color" content="#0a0a0f">
+  <style>
+    :root { --bg: #0a0a0f; --surface: #12121a; --border: #1e1e2e; --text: #c4945a; --text-dim: #a07a48; --accent: #c4945a; --mono: 'SF Mono','Cascadia Code','Fira Code','Consolas',monospace; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--mono); background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 700px; margin: 0 auto; }
+    h1 { font-size: 1rem; font-weight: 400; margin-bottom: 0.25rem; }
+    h1 a { color: var(--text-dim); text-decoration: none; }
+    h1 a:hover { color: var(--text); }
+    .subtitle { font-size: 0.65rem; color: var(--text-dim); opacity: 0.6; margin-bottom: 0.75rem; }
+    .share-url { font-size: 0.6rem; color: var(--text-dim); margin-bottom: 1rem; word-break: break-all; }
+    .share-url a { color: var(--accent); text-decoration: none; }
+    textarea { width: 100%; height: 60vh; background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 0.8rem; font: inherit; font-size: 0.8rem; resize: vertical; outline: none; }
+    textarea:focus { border-color: var(--accent); }
+    .bar { display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center; }
+    button { background: none; border: 1px solid var(--border); color: var(--text); padding: 0.3rem 0.8rem; font: inherit; font-size: 0.7rem; cursor: pointer; }
+    button:hover { border-color: var(--text); }
+    .status { font-size: 0.6rem; color: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><a href="/">ink</a> / share</h1>
+    <p class="subtitle">ephemeral shared clipboard — anyone with the URL can read and write, auto-syncs every 2s, expires in 5 minutes</p>
+    <div class="share-url" id="url"></div>
+    <textarea id="t" placeholder="type here..." spellcheck="false"></textarea>
+    <div class="bar">
+      <button onclick="copy()">copy</button>
+      <button onclick="clear_()">clear</button>
+      <button onclick="newRoom()">new room</button>
+      <span class="status" id="s"></span>
+    </div>
+  </div>
+  <script>
+    const WORKER = 'https://sea-ink.seaofglass.workers.dev';
+    let id = location.hash.slice(1) || crypto.randomUUID().replace(/-/g,'').slice(0,8);
+    if (!location.hash) location.hash = id;
+    const base = WORKER + '/s/share/';
+    let last = '', saving = false, syncing = false;
+    const t = document.getElementById('t'), s = document.getElementById('s');
+
+    document.getElementById('url').innerHTML = `share this link: <a href="${location.href}">${location.href}</a>`;
+
+    async function sync() {
+      if (saving || syncing) return;
+      syncing = true;
+      try {
+        const r = await fetch(base + id);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.text !== undefined && d.text !== last) {
+            last = d.text;
+            if (t.value !== d.text) t.value = d.text;
+            s.textContent = 'synced';
+          }
+        }
+      } catch {}
+      syncing = false;
+    }
+
+    async function save() {
+      if (syncing) return;
+      saving = true;
+      try {
+        await fetch(base + id, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: t.value }),
+        });
+        last = t.value;
+        s.textContent = 'saved';
+      } catch { s.textContent = 'error'; }
+      saving = false;
+    }
+
+    let timer;
+    t.addEventListener('input', () => {
+      clearTimeout(timer);
+      s.textContent = 'typing...';
+      timer = setTimeout(save, 500);
+    });
+    setInterval(sync, 2000);
+    sync();
+
+    function copy() { navigator.clipboard.writeText(t.value); s.textContent = 'copied'; }
+    function clear_() { t.value = ''; save(); }
+    function newRoom() {
+      id = crypto.randomUUID().replace(/-/g,'').slice(0,8);
+      location.hash = id;
+      t.value = '';
+      last = '';
+      document.getElementById('url').innerHTML = `share this link: <a href="${location.href}">${location.href}</a>`;
+      s.textContent = 'new room';
+    }
+  </script>
+</body>
+</html>
